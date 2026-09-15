@@ -1,0 +1,6 @@
+widths: [32]
+counts: [16]
+design_name_template: "CFGMEM{count}{variant}"
+variants:
+  - null
+  # - "1RW1R"

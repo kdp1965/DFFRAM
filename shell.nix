@@ -11,13 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-{
-    pkgs ? import <nixpkgs> {}
-}:
-
-let openlane-src = pkgs.fetchFromGitHub {
-    owner = "efabless";
-    repo = "openlane2";
-    rev = "83ec6c32add40006cc70d951745667d30193f51d";
-    sha256 = "sha256-9Xms6eRf3yyaFJVVjk+uPYYM+EDRl4GYAYYUK5QhiLc=";
-}; in import "${openlane-src}/shell.nix" {}
+#
+# dffram.py needs LibreLane plus the EDA tools (yosys, openroad, magic,
+# klayout, netgen). These come from the dev shell of a LibreLane checkout
+# that is expected to live next to this repository at ../librelane.
+#
+#   nix-shell            # enter the environment
+#   make                 # or just run make; it enters the shell itself
+import ../librelane/shell.nix

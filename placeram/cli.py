@@ -56,16 +56,20 @@ class Placer:
     def __init__(
         self,
         odb_in,
+        left,
         word_count,
         word_width,
         register_file,
         fill_cell_data,
         tap_distance,
+        placer=None,
     ):
         # Initialize Database
         self.db = odb.dbDatabase.create()
 
         odb.read_db(self.db, odb_in)
+
+        self.left = left
 
         # Technology Setup
         self.libs = self.db.getLibs()
@@ -83,9 +87,15 @@ class Placer:
         raw_decap_cells = list(
             filter(lambda x: re.match(fill_cell_data["decap"], x.getName()), self.cells)
         )
-        raw_tap_cells = list(
-            filter(lambda x: re.match(fill_cell_data["tap"], x.getName()), self.cells)
-        )
+        ### Some platforms (e.g. IHP sg13g2) have no tap cells: taps are
+        ### built into every standard cell. `tap: null` in tech.yml disables
+        ### tap insertion entirely.
+        tap_rx = fill_cell_data.get("tap")
+        raw_tap_cells = []
+        if tap_rx is not None:
+            raw_tap_cells = list(
+                filter(lambda x: re.match(tap_rx, x.getName()), self.cells)
+            )
         self.fill_cells_by_sites = {}
         tap_width = None
         for cell in raw_fill_cells:
@@ -97,7 +107,6 @@ class Placer:
             site_count = int(match_info[1])
             self.fill_cells_by_sites[site_count] = cell
         for cell in raw_tap_cells:
-            match_info = re.match(fill_cell_data["tap"], cell.getName())
             site_count = cell.getWidth() / self.sites[0].getWidth()
             self.fill_cells_by_sites[site_count] = cell
             tap_width = site_count
@@ -105,9 +114,11 @@ class Placer:
         fill_cell_sizes = list(self.fill_cells_by_sites.keys())
 
         if tap_width is None:
-            eprint("No tap cells found!")
-            print(fill_cell_sizes)
-            exit(-1)
+            if tap_rx is not None:
+                eprint("No tap cells found!")
+                print(fill_cell_sizes)
+                exit(-1)
+            eprint("Platform declares no tap cells; tap insertion disabled.")
 
         # Layout Setup
         self.block = self.db.getChip().getBlock()
@@ -127,14 +138,16 @@ class Placer:
             tap_distance,
             create_fill,
             fill_cell_sizes,
-            fill_cell_data["tap"],
+            tap_rx,
             tap_width,
         )
 
         if register_file:
             self.hierarchy = DFFRF(self.instances)
         else:
-            self.hierarchy = data.create_hierarchy(self.instances, word_count)
+            self.hierarchy = data.create_hierarchy(
+                self.instances, word_count, self.left, placer
+            )
 
         self.fill_cell_data = fill_cell_data
 
@@ -166,6 +179,8 @@ class Placer:
             master_name = master.getName()
             type = "nonfiller"
             for incoming_type, rx in self.fill_cell_data.items():
+                if rx is None:
+                    continue
                 if re.match(rx, master_name) is not None:
                     type = incoming_type
                     break
@@ -215,6 +230,11 @@ def check_readable(file):
     help="File to print out text representation of hierarchy to. (Pass /dev/stderr or /dev/stdout for stderr or stdout.)",
 )
 @click.option(
+    "--left",
+    is_flag=True,
+    help="Create a left-hand macro",
+)
+@click.option(
     "-b",
     "--building-blocks",
     default="sky130A:sky130_fd_sc_hd:ram",
@@ -234,6 +254,7 @@ def cli(
     output_def,
     input_lef,
     size,
+    left,
     represent,
     building_blocks,
     odb_in,
@@ -248,6 +269,7 @@ def cli(
     blocks_config = yaml.safe_load(open(blocks_config_file))
 
     register_file = blocks_config.get("register_file") or False
+    placer = blocks_config.get("placer")
 
     m = re.match(r"(\d+)x(\d+)", size)
     if m is None:
@@ -275,11 +297,13 @@ def cli(
 
     placer = Placer(
         odb_in,
+        left,
         words,
         word_length,
         register_file,
         fill_cell_data,
         tap_distance,
+        placer,
     )
 
     if represent is not None:

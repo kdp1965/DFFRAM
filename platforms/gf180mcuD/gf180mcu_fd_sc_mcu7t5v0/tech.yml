@@ -35,3 +35,5 @@ fills:
   fill: gf180mcu_fd_sc_mcu7t5v0__fill_(\d+)
   tap: gf180mcu_fd_sc_mcu7t5v0__filltie
   diode: gf180mcu_fd_sc_mcu7t5v0__antenna
+# Extra LibreLane configuration merged into the flow config for this platform.
+flow_config: {}

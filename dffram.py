@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#! python3
 # -*- coding: utf8 -*-
 # Copyright ©2020-2023 The American University in Cairo
 # Copyright ©2023 Efabless Corporation
@@ -19,20 +19,23 @@
 # limitations under the License.
 import os
 import re
+import json
 import math
-from typing import List
+from typing import Dict, List, Optional, Tuple
 from fnmatch import fnmatch
 from decimal import Decimal
 
 import yaml
 import cloup
-from openlane.common import mkdirp
-from openlane.config import Variable
-from openlane.logging import warn, err
-from openlane.state import DesignFormat
-from openlane.flows import SequentialFlow, cloup_flow_opts, Flow
-from openlane.steps import Yosys, OpenROAD, Magic, KLayout, Netgen, Odb, Checker, Misc
+from librelane.common import mkdirp, Path
+from librelane.config import Variable
+from librelane.logging import info, warn, err
+from librelane.state import DesignFormat
+from librelane.flows import SequentialFlow, cloup_flow_opts, Flow
+from librelane.flows.classic import Classic
+from librelane.steps import Step, Yosys, OpenROAD, Magic, KLayout, Netgen, Odb, Checker, Misc
 
+from librelane.steps import OpenROAD
 
 class PlaceRAM(Odb.OdbpyStep):
     id = "DFFRAM.PlaceRAM"
@@ -49,19 +52,34 @@ class PlaceRAM(Odb.OdbpyStep):
             "The set of building blocks being used.",
             default="ram",
         ),
+        Variable(
+            "LEFT",
+            bool,
+            "Set true to generate a left-hand macro",
+        ),
     ]
 
     def get_script_path(self):
         return "placeram"
 
     def get_command(self) -> List[str]:
-        raw = super().get_command() + [
-            "--building-blocks",
-            f"{self.config['PDK']}:{self.config['STD_CELL_LIBRARY']}:{self.config['BUILDING_BLOCKS']}",
-            "--size",
-            self.config["RAM_SIZE"],
-        ]
+        if self.config["LEFT"]:
+            raw = super().get_command() + [
+                "--building-blocks",
+                f"{self.config['PDK']}:{self.config['STD_CELL_LIBRARY']}:{self.config['BUILDING_BLOCKS']}",
+                "--size",
+                self.config["RAM_SIZE"],
+                "--left",
+            ]
+        else:
+            raw = super().get_command() + [
+                "--building-blocks",
+                f"{self.config['PDK']}:{self.config['STD_CELL_LIBRARY']}:{self.config['BUILDING_BLOCKS']}",
+                "--size",
+                self.config["RAM_SIZE"],
+            ]
         raw.insert(raw.index("placeram"), "-m")
+        print(f'RAW COMMAND: {raw}')
         return raw
 
 
@@ -152,6 +170,244 @@ class Floorplan(OpenROAD.Floorplan):
         return super().run(state_in, env=env, **kwargs)
 
 
+Rect = Tuple[float, float, float, float]
+
+
+def _rect_minus(rect: Rect, hole: Rect) -> List[Rect]:
+    """Subtract `hole` from `rect`, returning up to four rectangles."""
+    x0, y0, x1, y1 = rect
+    hx0, hy0, hx1, hy1 = hole
+    if hx0 >= x1 or hx1 <= x0 or hy0 >= y1 or hy1 <= y0:
+        return [rect]
+    out: List[Rect] = []
+    if hy1 < y1:
+        out.append((x0, hy1, x1, y1))
+    if hy0 > y0:
+        out.append((x0, y0, x1, hy0))
+    my0, my1 = max(y0, hy0), min(y1, hy1)
+    if hx0 > x0:
+        out.append((x0, my0, hx0, my1))
+    if hx1 < x1:
+        out.append((hx1, my0, x1, my1))
+    return out
+
+
+def _lef_pin_rects(lef_text: str) -> Dict[str, List[Rect]]:
+    """Pin rectangles per layer from a LEF macro."""
+    rects: Dict[str, List[Rect]] = {}
+    for _, body in re.findall(r"^\s*PIN (\S+)(.*?)^\s*END \1\s*$", lef_text, re.S | re.M):
+        layer = None
+        for line in body.splitlines():
+            parts = line.split()
+            if not parts:
+                continue
+            if parts[0] == "LAYER":
+                layer = parts[1]
+            elif parts[0] == "RECT" and layer is not None:
+                rects.setdefault(layer, []).append(
+                    tuple(float(v) for v in parts[1:5])  # type: ignore
+                )
+    return rects
+
+
+def merge_route_through_lef(
+    base_lef: str,
+    new_obs: Dict[str, List[Rect]],
+    out_lef: str,
+    layers: List[str],
+    pin_clearance: float,
+) -> Dict[str, Tuple[int, float]]:
+    """
+    Copy `base_lef` (Magic's abstract: pins plus hidden, bounding-box
+    obstructions) to `out_lef`, replacing the OBS entries of `layers` with the
+    rectangles in `new_obs` (the drawn geometry of those layers), kept
+    `pin_clearance` away from same-layer pins.
+
+    Returns, per layer, the number of rectangles written and the fraction of
+    the macro area they cover.
+    """
+    base = open(base_lef, encoding="utf8").read()
+    size = re.search(r"SIZE\s+([\d.]+)\s+BY\s+([\d.]+)", base)
+    macro_area = float(size.group(1)) * float(size.group(2)) if size else 1.0
+
+    pins = _lef_pin_rects(base)
+    width = float(size.group(1)) if size else 0.0
+    height = float(size.group(2)) if size else 0.0
+    stats: Dict[str, Tuple[int, float]] = {}
+    replacement: Dict[str, List[Rect]] = {}
+    for layer in layers:
+        rects = new_obs.get(layer, [])
+        for px0, py0, px1, py1 in pins.get(layer, []):
+            # Clearance outside the macro and along the pin's sides, but none
+            # towards the macro interior: the pin's own wire continues there
+            # and has to stay an obstruction, or the router lays a same-net
+            # wire a few nanometres from metal it cannot see (an M3.b
+            # spacing violation on the tile, 2026-09-15).
+            eps = 1e-3
+            on_west, on_east = px0 <= eps, px1 >= width - eps
+            on_south, on_north = py0 <= eps, py1 >= height - eps
+            hole = (
+                px0 if on_east else px0 - pin_clearance,
+                py0 if on_north else py0 - pin_clearance,
+                px1 if on_west else px1 + pin_clearance,
+                py1 if on_south else py1 + pin_clearance,
+            )
+            rects = [piece for r in rects for piece in _rect_minus(r, hole)]
+        replacement[layer] = rects
+        area = sum((x1 - x0) * (y1 - y0) for x0, y0, x1, y1 in rects)
+        stats[layer] = (len(rects), area / macro_area)
+
+    obs_match = re.search(r"^(\s*)OBS\s*$(.*?)^\s*END\s*$", base, re.S | re.M)
+    if obs_match is None:
+        raise ValueError(f"No OBS section found in {base_lef}")
+    indent = obs_match.group(1)
+    kept: List[str] = []
+    layer = None
+    for line in obs_match.group(2).splitlines():
+        parts = line.split()
+        if parts and parts[0] == "LAYER":
+            layer = parts[1]
+        if layer in replacement:
+            continue  # dropped: rewritten below
+        kept.append(line)
+    rewritten = "\n".join(kept).rstrip("\n")
+    for layer, rects in replacement.items():
+        rewritten += f"\n{indent}   LAYER {layer} ;"
+        for x0, y0, x1, y1 in rects:
+            rewritten += f"\n{indent}      RECT {x0:.3f} {y0:.3f} {x1:.3f} {y1:.3f} ;"
+    new_text = (
+        base[: obs_match.start()]
+        + f"{indent}OBS"
+        + rewritten
+        + f"\n{indent}END"
+        + base[obs_match.end():]
+    )
+    with open(out_lef, "w", encoding="utf8") as f:
+        f.write(new_text)
+    return stats
+
+
+def _def_layer_map(path: str) -> Dict[str, Tuple[int, int]]:
+    """LEF layer name -> (GDS layer, datatype) of its drawn (NET) shapes."""
+    result: Dict[str, Tuple[int, int]] = {}
+    for line in open(path, encoding="utf8"):
+        parts = line.split()
+        if len(parts) == 4 and "NET" in parts[1].split(",") and parts[0] not in result:
+            try:
+                result[parts[0]] = (int(parts[2]), int(parts[3]))
+            except ValueError:
+                pass
+    return result
+
+
+_KLAYOUT_LAYER_MAP_VAR = next(
+    v for v in KLayout.KLayoutStep.config_vars if v.name == "KLAYOUT_DEF_LAYER_MAP"
+)
+
+
+class WriteAbstractLEF(Step):
+    """
+    Rewrites the macro's abstract LEF so that, on selected layers, the
+    obstructions follow the drawn geometry of the GDS (wires, via pads, power
+    shapes) instead of covering the whole macro. The top level can then route
+    through the unused tracks of those layers. Pins and the remaining layers
+    are taken unchanged from Magic's LEF.
+    """
+
+    id = "DFFRAM.WriteAbstractLEF"
+    name = "Route-Through Abstract LEF"
+
+    inputs = [DesignFormat.GDS, DesignFormat.LEF]
+    outputs = [DesignFormat.LEF]
+
+    config_vars = [
+        _KLAYOUT_LAYER_MAP_VAR,
+        Variable(
+            "LEF_ROUTE_THROUGH_LAYERS",
+            Optional[List[str]],
+            "Layers whose obstructions in the macro LEF follow the drawn "
+            "geometry instead of Magic's hidden bounding box. Unset keeps "
+            "Magic's abstract unchanged.",
+        ),
+        Variable(
+            "LEF_ROUTE_THROUGH_GAP",
+            Decimal,
+            "Gaps between shapes narrower than this are obstructed as well, so "
+            "the parent router is not offered slots it cannot use.",
+            units="µm",
+            default=0.5,
+        ),
+        Variable(
+            "LEF_ROUTE_THROUGH_PIN_CLEARANCE",
+            Decimal,
+            "Clearance kept between the rewritten obstructions and pins on the same layer.",
+            units="µm",
+            default=0.3,
+        ),
+    ]
+
+    def run(self, state_in, **kwargs):
+        layers = self.config["LEF_ROUTE_THROUGH_LAYERS"] or []
+        if not layers:
+            info("LEF_ROUTE_THROUGH_LAYERS is unset: keeping the Magic abstract LEF.")
+            return {}, {}
+
+        layer_map = _def_layer_map(str(self.config["KLAYOUT_DEF_LAYER_MAP"]))
+        missing = [layer for layer in layers if layer not in layer_map]
+        if missing:
+            raise ValueError(f"Layers {missing} not found in {self.config['KLAYOUT_DEF_LAYER_MAP']}")
+        spec = ",".join(f"{layer}={layer_map[layer][0]}/{layer_map[layer][1]}" for layer in layers)
+
+        design = self.config["DESIGN_NAME"]
+        obs_json = os.path.join(self.step_dir, "obstructions.json")
+        script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "scripts", "klayout", "route_through_obs.py"
+        )
+        self.run_subprocess(
+            [
+                "klayout", "-b", "-r", script,
+                "-rd", f"gds={state_in[DesignFormat.GDS]}",
+                "-rd", f"top={design}",
+                "-rd", f"layers={spec}",
+                "-rd", f"gap={self.config['LEF_ROUTE_THROUGH_GAP']}",
+                "-rd", f"out={obs_json}",
+            ],
+            log_to=os.path.join(self.step_dir, "klayout.log"),
+        )
+        with open(obs_json, encoding="utf8") as f:
+            new_obs = {layer: [tuple(r) for r in rects] for layer, rects in json.load(f).items()}
+
+        out_lef = os.path.join(self.step_dir, f"{design}.lef")
+        stats = merge_route_through_lef(
+            str(state_in[DesignFormat.LEF]),
+            new_obs,
+            out_lef,
+            layers,
+            float(self.config["LEF_ROUTE_THROUGH_PIN_CLEARANCE"]),
+        )
+        for layer, (count, coverage) in stats.items():
+            info(
+                f"{layer}: {count} obstruction rectangles covering "
+                f"{coverage * 100:.0f}% of the macro (rest is open for routing)."
+            )
+        return {DesignFormat.LEF: Path(out_lef)}, {}
+
+
+GATED_RUN_VARS = [
+    "RUN_MAGIC_STREAMOUT",
+    "RUN_KLAYOUT_STREAMOUT",
+    "RUN_MAGIC_WRITE_LEF",
+    "RUN_MAGIC_DRC",
+    "RUN_KLAYOUT_DRC",
+    "RUN_KLAYOUT_XOR",
+    "RUN_LVS",
+    "RUN_FILL_INSERTION",
+    "RUN_SPEF_EXTRACTION",
+    "RUN_MCSTA",
+    "RUN_IRDROP_REPORT",
+]
+
+
 @Flow.factory.register()
 class DFFRAM(SequentialFlow):
     Steps = [
@@ -167,22 +423,38 @@ class DFFRAM(SequentialFlow):
         OpenROAD.GeneratePDN,
         OpenROAD.STAMidPNR,
         OpenROAD.GlobalRouting,
+
+        OpenROAD.CheckAntennas,
+#        OpenROAD.RepairDesignPostGRT,
+        Odb.DiodesOnPorts,
+        Odb.HeuristicDiodeInsertion,
+        OpenROAD.RepairAntennas,
+
         OpenROAD.STAMidPNR,
         OpenROAD.DetailedRouting,
+        Odb.RemoveRoutingObstructions,
+        OpenROAD.CheckAntennas,
         Checker.TrDRC,
         Odb.ReportDisconnectedPins,
         Checker.DisconnectedPins,
         Odb.ReportWireLength,
         Checker.WireLength,
+        OpenROAD.FillInsertion,
         OpenROAD.RCX,
         OpenROAD.STAPostPNR,
         OpenROAD.IRDropReport,
         Magic.StreamOut,
+        KLayout.StreamOut,
         Magic.WriteLEF,
+        WriteAbstractLEF,
+        Odb.CheckDesignAntennaProperties,
         KLayout.StreamOut,
         KLayout.XOR,
         Checker.XOR,
         Magic.DRC,
+
+        KLayout.DRC,
+
         Checker.MagicDRC,
         Magic.SpiceExtraction,
         Checker.IllegalOverlap,
@@ -190,9 +462,42 @@ class DFFRAM(SequentialFlow):
         Checker.LVS,
     ]
 
+    # Same RUN_* switches as LibreLane's Classic flow, so a platform can
+    # disable signoff tools it does not support via tech.yml `flow_config`.
+    config_vars = [var for var in Classic.config_vars if var.name in GATED_RUN_VARS]
+
+    gating_config_vars = {
+        "Magic.StreamOut": ["RUN_MAGIC_STREAMOUT"],
+        "KLayout.StreamOut": ["RUN_KLAYOUT_STREAMOUT"],
+        "Magic.WriteLEF": ["RUN_MAGIC_WRITE_LEF"],
+        "DFFRAM.WriteAbstractLEF": ["RUN_MAGIC_WRITE_LEF"],
+        "Magic.DRC": ["RUN_MAGIC_DRC"],
+        "Checker.MagicDRC": ["RUN_MAGIC_DRC"],
+        "KLayout.DRC": ["RUN_KLAYOUT_DRC"],
+        "KLayout.XOR": [
+            "RUN_KLAYOUT_XOR",
+            "RUN_MAGIC_STREAMOUT",
+            "RUN_KLAYOUT_STREAMOUT",
+        ],
+        "Checker.XOR": [
+            "RUN_KLAYOUT_XOR",
+            "RUN_MAGIC_STREAMOUT",
+            "RUN_KLAYOUT_STREAMOUT",
+        ],
+        "Magic.SpiceExtraction": ["RUN_LVS"],
+        "Checker.IllegalOverlap": ["RUN_LVS"],
+        "Netgen.LVS": ["RUN_LVS"],
+        "Checker.LVS": ["RUN_LVS"],
+        "OpenROAD.FillInsertion": ["RUN_FILL_INSERTION"],
+        "OpenROAD.RCX": ["RUN_SPEF_EXTRACTION"],
+        "OpenROAD.STAPostPNR": ["RUN_MCSTA"],
+        "OpenROAD.IRDropReport": ["RUN_IRDROP_REPORT"],
+    }
+
 
 @cloup.command()
 @cloup.option("-b", "--building-blocks", default="ram")
+@cloup.option("--left", is_flag=True)
 @cloup.option(
     "-v", "--variant", default=None, help="Use design variants (such as 1RW1R)"
 )
@@ -206,15 +511,27 @@ class DFFRAM(SequentialFlow):
 )
 @cloup.option(
     "--horizontal-halo",
-    default=2.5,
+#    default=2.5,
+    default=1.0,
     type=Decimal,
     help="Horizontal halo in µm",
 )
 @cloup.option(
     "--vertical-halo",
-    default=2.5,
+#    default=2.5,
+    default=1.0,
     type=Decimal,
     help="Vertical halo in µm",
+)
+@cloup.option(
+    "--build-dir",
+    default="build",
+    help="Directory under which per-design run directories are created",
+)
+@cloup.option(
+    "--products-dir",
+    default="products",
+    help="Directory under which the final views of each design are saved",
 )
 @cloup.option(
     "-H",
@@ -236,11 +553,14 @@ def main(
     with_initial_state,
     size,
     building_blocks,
+    left,
     variant,
     horizontal_halo,
     vertical_halo,
     default_clock_period,
     min_height,
+    build_dir,
+    products_dir,
     flow_name,
     pdk_root,
     **kwargs,
@@ -248,7 +568,19 @@ def main(
     if variant == "DEFAULT":
         variant = None
 
-    scl = scl or "sky130_fd_sc_hd"
+    if scl is None:
+        # Default to the platform's only standard cell library, if it has one.
+        pdk_platforms = os.path.join(".", "platforms", pdk)
+        libraries = (
+            sorted(
+                d
+                for d in os.listdir(pdk_platforms)
+                if os.path.isdir(os.path.join(pdk_platforms, d))
+            )
+            if os.path.isdir(pdk_platforms)
+            else []
+        )
+        scl = libraries[0] if len(libraries) == 1 else "sky130_fd_sc_hd"
     platform = f"{pdk}:{scl}"
 
     bb_dir = os.path.join(".", "models", building_blocks)
@@ -299,7 +631,7 @@ def main(
         }
     )
 
-    build_dir = os.path.join("build", design)
+    build_dir = os.path.join(build_dir, design)
     mkdirp(build_dir)
 
     tech_info_path = os.path.join(".", "platforms", pdk, scl, "tech.yml")
@@ -319,6 +651,19 @@ def main(
 
     rt_max_layer = tech_info["metal_layers"]["rt-max-layer"]
 
+    # Platform-specific LibreLane settings (PDN pitch, tool switches, ...).
+    # String values may reference environment variables such as $PDK_ROOT;
+    # an absolute path that does not exist on this machine is dropped with a
+    # warning so the platform stays usable without optional add-ons.
+    platform_flow_config = {}
+    for key, value in (tech_info.get("flow_config") or {}).items():
+        if isinstance(value, str) and "$" in value:
+            value = os.path.expandvars(value)
+            if value.startswith("/") and not os.path.exists(value):
+                warn(f"{key}: '{value}' not found, using the PDK default.")
+                continue
+        platform_flow_config[key] = value
+
     TargetFlow = Flow.factory.get(flow_name) or DFFRAM
     dffram_flow = TargetFlow(
         {
@@ -332,6 +677,7 @@ def main(
             "PDK": pdk,
             "STD_CELL_LIBRARY": scl,
             "RAM_SIZE": size,
+            "LEFT": left,
             "BUILDING_BLOCKS": building_blocks,
             "VERILOG_FILES": [
                 block_definitions_used,
@@ -357,6 +703,7 @@ def main(
             "FP_IO_HLENGTH": 2,
             # PDN
             "DESIGN_IS_CORE": False,
+            **platform_flow_config,
         },
         design_dir=os.path.abspath(build_dir),
         pdk_root=pdk_root,
@@ -371,13 +718,8 @@ def main(
         with_initial_state=with_initial_state,
     )
 
-    mkdirp("products")
-    final_state.save_snapshot(
-        os.path.join(
-            "products",
-            design,
-        )
-    )
+    mkdirp(products_dir)
+    final_state.save_snapshot(os.path.join(products_dir, design))
 
 
 if __name__ == "__main__":

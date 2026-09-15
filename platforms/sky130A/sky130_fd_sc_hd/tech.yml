@@ -2,7 +2,7 @@ tap_distance: 15
 metal_layers:
   hor-layer: met3
   ver-layer: met2
-  rt-max-layer: met4
+  rt-max-layer: met3
 site:
   width: 0.46
   height: 2.72
@@ -35,3 +35,13 @@ fills:
   fill: sky130_fd_sc_hd__fill_(\d+)
   tap: sky130_fd_sc_hd__tapvpwrvgnd_(\d+)
   diode: sky130_fd_sc_hd__diode_(\d+)
+# Extra LibreLane configuration merged into the flow config for this platform.
+flow_config:
+  # Vertical PDN stripes tuned for the Tiny Tapeout sky130 template
+  FP_PDN_VOFFSET: 17.7
+  FP_PDN_VPITCH: 38.87
+  # Let the parent design route through the macro's unused met3 tracks:
+  # obstructions on this layer follow the actual wires (see
+  # DFFRAM.WriteAbstractLEF in dffram.py); the top routing layer only carries
+  # the power stripes as pins and is open anyway.
+  LEF_ROUTE_THROUGH_LAYERS: [met3]

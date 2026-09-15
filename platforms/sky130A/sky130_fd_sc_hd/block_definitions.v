@@ -66,6 +66,18 @@ module DEC3x8 (
     sky130_fd_sc_hd__and4_2     AND7 ( .X(SEL[7])  , .A(A_buf[0]), .B(A_buf[1]), .C(A_buf[2])  , .D(EN_buf) ); // 111
 endmodule
 
+module DEC4x16 (
+    input   [3:0]   A,
+    input           EN,
+    output  [15:0]  SEL
+);
+	wire [1:0]  EN0;
+	DEC3x8 D0 ( .A(A[2:0]), .SEL(SEL[7:0]),   .EN(EN0[0]) );
+	DEC3x8 D1 ( .A(A[2:0]), .SEL(SEL[15:8]),  .EN(EN0[1]) );
+
+	DEC1x2 D ( .A(A[3:3]), .SEL(EN0), .EN(EN) );
+endmodule
+
 module DEC5x32 (
     input   [4:0]   A,
     output  [31:0]  SEL
@@ -79,7 +91,7 @@ module DEC5x32 (
     wire hi;
     sky130_fd_sc_hd__conb_1 TIE  (.LO(), .HI(hi));
 
-	DEC2x4 D ( .A(A[4:3]), .SEL(EN), .EN(hi) );
+	DEC3x4 D ( .A(A[4:3]), .SEL(EN), .EN(hi) );
 endmodule
 
 module MUX4x1 #(parameter   WIDTH=32)
@@ -211,7 +223,7 @@ module BYTE #(  parameter   USE_LATCH=1)(
                 sky130_fd_sc_hd__dfxtp_1 STORAGE ( .D(Di0[i]), .Q(Q_WIRE[i]), .CLK(GCLK) );
             else 
                 sky130_fd_sc_hd__dlxtp_1 STORAGE (.Q(Q_WIRE[i]), .D(Di0[i]), .GATE(GCLK) );
-            sky130_fd_sc_hd__ebufn_2 OBUF0 ( .A(Q_WIRE[i]), .Z(Do0[i]), .TE_B(SEL0_B) );
+            sky130_fd_sc_hd__ebufn_4 OBUF0 ( .A(Q_WIRE[i]), .Z(Do0[i]), .TE_B(SEL0_B) );
         end
     endgenerate 
   
@@ -258,6 +270,43 @@ module BYTE_1RW1R #(  parameter   USE_LATCH=1)(
 
             sky130_fd_sc_hd__ebufn_2 OBUF0 ( .A(Q_WIRE[i]), .Z(Do0[i]), .TE_B(SEL0_B) );
             sky130_fd_sc_hd__ebufn_2 OBUF1 ( .A(Q_WIRE[i]), .Z(Do1[i]), .TE_B(SEL1_B) );
+        end
+    endgenerate 
+  
+endmodule
+
+module CFGBYTE #(  parameter   USE_LATCH=1)( 
+    input   wire        CLK,    // FO: 1
+    input   wire        WE0,     // FO: 1
+    input   wire        SEL0,    // FO: 2
+    input   wire [7:0]  Di0,     // FO: 1
+    output  wire [7:0]  Do0
+);
+
+    wire [7:0]  Q_WIRE;
+    wire        GCLK;
+    wire        CLK_B;
+
+    generate 
+        genvar i;
+`ifndef NO_DIODES
+        (* keep = "true" *)
+        sky130_fd_sc_hd__diode_2 DIODE_CLK (.DIODE(CLK));
+`endif
+
+        if(USE_LATCH == 1) begin
+            sky130_fd_sc_hd__inv_1 CLKINV(.Y(CLK_B), .A(CLK));
+            sky130_fd_sc_hd__dlclkp_1 CG( .CLK(CLK_B), .GCLK(GCLK), .GATE(WE0) );
+        end else begin
+            sky130_fd_sc_hd__dlclkp_1 CG( .CLK(CLK), .GCLK(GCLK), .GATE(WE0) );
+        end
+    
+        for(i=0; i<8; i=i+1) begin : BIT
+            if(USE_LATCH == 0)
+                sky130_fd_sc_hd__dfxtp_1 STORAGE ( .D(Di0[i]), .Q(Q_WIRE[i]), .CLK(GCLK) );
+            else 
+                sky130_fd_sc_hd__dlxtp_1 STORAGE (.Q(Q_WIRE[i]), .D(Di0[i]), .GATE(GCLK) );
+            sky130_fd_sc_hd__and2_1 OAND ( .A(Q_WIRE[i]), .B(SEL0), .X(Do0[i]) );
         end
     endgenerate 
   
@@ -319,6 +368,29 @@ module WORD_1RW1R #( parameter  USE_LATCH=1,
     
 endmodule 
 
+module CFGWORD #( parameter    USE_LATCH=0,
+                            WSIZE=1 ) (
+    input   wire                 CLK,    // FO: 1
+    input   wire [WSIZE-1:0]     WE0,     // FO: 1
+    input   wire                 SEL0,    // FO: 1
+    input   wire [(WSIZE*8-1):0] Di0,     // FO: 1
+    output  wire [(WSIZE*8-1):0] Do0
+);
+
+    wire CLK_buf;
+    wire SEL0_buf;
+
+    sky130_fd_sc_hd__clkbuf_4 CLKBUF (.X(CLK_buf), .A(CLK));
+    sky130_fd_sc_hd__clkbuf_2 SEL0BUF (.X(SEL0_buf), .A(SEL0));
+    generate
+        genvar i;
+            for(i=0; i<WSIZE; i=i+1) begin : BYTE
+                CFGBYTE #(.USE_LATCH(USE_LATCH)) B ( .CLK(CLK_buf), .WE0(WE0[i]), .SEL0(SEL0_buf), .Di0(Di0[(i+1)*8-1:i*8]), .Do0(Do0[(i+1)*8-1:i*8]) );
+            end
+    endgenerate
+    
+endmodule 
+
 
 module  CLKBUF_2  (input A, output X); 
 
@@ -353,7 +425,7 @@ endmodule
 
 module EBUFN_2 (input A, input TE_B, output Z); 
 
-sky130_fd_sc_hd__ebufn_2 __cell__ ( .A(A), .TE_B(TE_B), .Z(Z));
+sky130_fd_sc_hd__ebufn_4 __cell__ ( .A(A), .TE_B(TE_B), .Z(Z));
 
 endmodule
 
@@ -418,3 +490,29 @@ module RFWORD0 #(parameter WSIZE=32)
         end
     endgenerate 
 endmodule
+
+module CFG_WORD ( 
+    input   wire        LE0,
+    input   wire [31:0] Di0,
+    output  wire [31:0] Do0
+);
+
+    wire [31:0] Q_WIRE;
+    wire        LE0_WIRE;
+
+    generate 
+        genvar i;
+`ifndef NO_DIODES
+        (* keep = "true" *)
+        sky130_fd_sc_hd__diode_2 DIODE_LE0 (.DIODE(LE0));
+`endif
+
+//        sky130_fd_sc_hd__clkbuf_4 LEBUF  (.X(LE0_WIRE), .A(LE0));
+    
+        for(i=0; i<32; i=i+1) begin : CFG_BIT
+            sky130_fd_sc_hd__dlxtp_1 STORAGE  (.Q(Do0[i]), .D(Di0[i]), .GATE(LE0) );
+        end
+    endgenerate 
+  
+endmodule
+

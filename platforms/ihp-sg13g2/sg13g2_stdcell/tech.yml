@@ -1,0 +1,47 @@
+# IHP SG13G2 (130 nm, "CMOS5L" metal stack: Metal1-5 + TopMetal1/2).
+# Only the cfgmem_ihp* building blocks are ported to this platform; see
+# block_definitions.v.
+
+# sg13g2 standard cells carry their own well/substrate taps: there is no tap
+# cell and tap insertion is disabled (fills.tap: null).
+tap_distance: 0
+metal_layers:
+  hor-layer: Metal3
+  ver-layer: Metal2
+  # Keep macro routing at or below Metal4 so the parent design can still route
+  # over the macro on Metal5 and build its PDN on TopMetal1/TopMetal2.
+  rt-max-layer: Metal4
+site:
+  width: 0.48
+  height: 3.78
+  name: CoreSite
+tie:
+  tie_lo_cell: sg13g2_tielo
+  tie_lo_port: L_LO
+  tie_hi_cell: sg13g2_tiehi
+  tie_hi_port: L_HI
+sta:
+  driving_cell:
+    name: sg13g2_buf_4
+    pin: "X"
+  libs:
+    typical: sg13g2_stdcell_typ_1p20V_25C.lib
+    slow: sg13g2_stdcell_slow_1p08V_125C.lib
+    fast: sg13g2_stdcell_fast_1p32V_m40C.lib
+  clock_periods:
+    cfgmem_ihp: {}
+    cfgmem_ihp_left: {}
+    ram: {}
+    rf: {}
+fills:
+  decap: sg13g2_decap_(\d+)
+  fill: sg13g2_fill_(\d+)
+  tap: null
+  diode: sg13g2_antennanp
+# Extra LibreLane configuration merged into the flow config for this platform.
+flow_config:
+  # Let the parent design route through the macro's unused Metal3 tracks:
+  # obstructions on this layer follow the actual wires (see
+  # DFFRAM.WriteAbstractLEF in dffram.py); the top routing layer only carries
+  # the power stripes as pins and is open anyway.
+  LEF_ROUTE_THROUGH_LAYERS: [Metal3]

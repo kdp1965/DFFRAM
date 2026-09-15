@@ -26,12 +26,43 @@ but it is a bit out-of-date at this point.
 | `sky130A` | Yes | Yes |
 | `sky130B` | Yes | No |
 | `gf180mcuD` | No\* (Hold violations in the Netlist) | No |
+| `ihp-sg13g2` | `cfgmem_ihp` / `cfgmem_ihp_left` building blocks only | No |
+| `ihp-sg13cmos5l` | `cfgmem_ihp` / `cfgmem_ihp_left` building blocks only (manual PDK install, see below) | No |
 
 > \* Silicon proven does not imply that you should use it without whole-system,
 > timing-annotated simulation to make sure that it works for your circuit.
 >
 > There may be design-specific complications that may render DFFRAM (and indeed
 > the entire chip) unusable. Proceed with caution.
+
+### IHP SG13CMOS5L
+
+The `ihp-sg13cmos5l` PDK is not distributed through ciel. The Tiny Tapeout
+CMOS5L flow (`tt-gds-action@ihp-cmos5l`) pins commit `ae76139` of the
+standalone `IHP-GmbH/ihp-sg13cmos5l` repository, whose symlinks expect to live
+next to an `ihp-sg13g2` tree from the IHP-Open-PDK `dev` branch. That branch
+now also vendors its own, newer `ihp-sg13cmos5l` (whose Magic tech needs Magic
+8.3.657 or later), so keep the pinned clone under a separate name and point
+`$PDK_ROOT/ihp-sg13cmos5l` at it:
+
+```sh
+git clone --depth 1 --branch dev https://github.com/IHP-GmbH/IHP-Open-PDK.git $PDK_ROOT/ihp-open-pdk-dev
+git clone https://github.com/IHP-GmbH/ihp-sg13cmos5l.git $PDK_ROOT/ihp-open-pdk-dev/ihp-sg13cmos5l-ae76139
+git -C $PDK_ROOT/ihp-open-pdk-dev/ihp-sg13cmos5l-ae76139 checkout ae7613984daf3ac2b14897321399df497278068f
+ln -s ihp-open-pdk-dev/ihp-sg13cmos5l-ae76139 $PDK_ROOT/ihp-sg13cmos5l
+# the dev branch moved the RCX rules that the pinned clone links to:
+ln -s openrcx/IHP_rcx_patterns.rules $PDK_ROOT/ihp-open-pdk-dev/ihp-sg13g2/libs.tech/librelane/IHP_rcx_patterns.rules
+```
+
+Then apply the same fixes as `install_sg13cmos5l.sh` in
+`TinyTapeout/tt-gds-action` (branch `ihp-cmos5l`) inside the pinned clone: add
+the Magic and Netgen setup lines to `libs.tech/librelane/config.tcl`, write a
+`SOURCES` file, and drop the `%include rule_decks/...` lines (except
+`layers_def`) from `libs.tech/klayout/tech/drc/ihp-sg13cmos5l.drc`. The
+platform's `tech.yml` supplies `DIODE_CELL` with its pin, which that PDK
+revision omits, and points `KLAYOUT_DRC_RUNSET` at the self-contained DRC deck
+of the dev-branch copy (the trimmed pinned deck checks nothing). Build with
+`--manual-pdk`, e.g. `make cfgmem16_cmos5l`.
 
 # Overview
 
@@ -102,7 +133,15 @@ configurations to build DFFRAM different macros.
     * `<scl-name>/`
       * `_building_blocks/` contains a hierarchy of building blocks supported by
         the compiler.
+      * `tech.yml` describes the platform (site, fill/tap/diode cells, routing
+        layers) and may carry a `flow_config` mapping of extra LibreLane
+        variables for that platform. `LEF_ROUTE_THROUGH_LAYERS` lists layers
+        whose obstructions in the macro LEF follow the routed wires instead of
+        blocking the whole macro, so a parent design can route through the
+        unused tracks (see `DFFRAM.WriteAbstractLEF` in `dffram.py`).
 * `placeram/` is the custom placer Python module.
+* `verification/cfgmem/` is a Verilator testbench for the CFGMEM16 macros
+  (`make test-cfgmem`), run against the RTL models and the built netlists.
 * `scripts/` has assisting scripts used by the flow.
 * `dffram.py` is the compilation flow going from building blocks to LVS.
 

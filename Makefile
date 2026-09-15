@@ -1,3 +1,47 @@
+# DFFRAM needs LibreLane and the EDA tools, which come from the Nix shell in
+# ./shell.nix. When `make` is run outside that shell, each recipe is re-run
+# inside it automatically (nix-shell sets IN_NIX_SHELL).
+ifeq ($(IN_NIX_SHELL),)
+NIX_RUN = nix-shell --run
+else
+NIX_RUN = sh -c
+endif
+
+cfgmem16:
+	$(NIX_RUN) "python3 dffram.py -b cfgmem 16x32"
+
+left:
+	$(NIX_RUN) "python3 dffram.py -b cfgmem_left --left 16x32"
+
+# IHP SG13CMOS5L (ihp-sg13cmos5l PDK, sg13cmos5l_stdcell library). The PDK is
+# not in ciel: it must be installed under $PDK_ROOT/ihp-sg13cmos5l (see Readme).
+cfgmem16_cmos5l:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp 16x32"
+
+left_cmos5l:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left 16x32"
+
+# IHP SG13G2 (ihp-sg13g2 PDK, sg13g2_stdcell library). Same models and design
+# names as CMOS5L, so the outputs go to build/ihp-sg13g2 and products/ihp-sg13g2.
+cfgmem16_sg13g2:
+	$(NIX_RUN) "python3 dffram.py -p ihp-sg13g2 -s sg13g2_stdcell -b cfgmem_ihp --build-dir build/ihp-sg13g2 --products-dir products/ihp-sg13g2 16x32"
+
+left_sg13g2:
+	$(NIX_RUN) "python3 dffram.py -p ihp-sg13g2 -s sg13g2_stdcell -b cfgmem_ihp_left --left --build-dir build/ihp-sg13g2 --products-dir products/ihp-sg13g2 16x32"
+
+# Verilator regression of the CFGMEM16 macros (RTL and any built netlists);
+# see verification/cfgmem/README.md.
+test-cfgmem:
+	$(NIX_RUN) "make -C verification/cfgmem all"
+
+# Tile-level trial: one CFGMEM_IHP16 inside a Tiny Tapeout 2x2 CMOS5L tile,
+# programmed over SPI (see tile_trial/). test-tile simulates the tile RTL.
+tile-trial:
+	$(NIX_RUN) "cd tile_trial && python3 flow.py"
+
+test-tile:
+	$(NIX_RUN) "make -C tile_trial/tb run"
+
 all: dist
 
 .PHONY: dist

@@ -1,0 +1,3 @@
+# Not distributed through ciel: install manually, see Readme (IHP-Open-PDK dev + ihp-sg13cmos5l)
+pdk_family: ihp-sg13cmos5l
+pdk_version: ae7613984daf3ac2b14897321399df497278068f

@@ -61,6 +61,8 @@ class Row(object):
         return self.x - self.xmin
 
     def tap(self, width: float = 0):
+        if Row.tap_width is None:
+            return
         if self.since_last_tap + width > Row.tap_distance:
             self.place(
                 Row.create_fill(
@@ -84,7 +86,9 @@ class Row(object):
         instance.setLocation(self.x, self.y)
         instance.setPlacementStatus("PLACED" if not fixed else "LOCKED")
 
-        if re.match(Row.tap_rx, instance.getMaster().getName()):
+        if Row.tap_rx is not None and re.match(
+            Row.tap_rx, instance.getMaster().getName()
+        ):
             self.since_last_tap = 0
         else:
             self.since_last_tap += width
@@ -141,7 +145,8 @@ class Row(object):
             tracker = 0
 
             since_last_tap = 0
-            if current > Row.tap_width:
+            taps = Row.tap_width is not None
+            if taps and current > Row.tap_width:
                 # Always start with a tap.
                 fills.append(Row.tap_width)
                 current -= Row.tap_width
@@ -150,7 +155,7 @@ class Row(object):
                 current_fill = fill_sizes[tracker]
                 current_width = current_fill * Row.sw
                 while current >= current_fill:
-                    if since_last_tap + current_width > Row.tap_distance:
+                    if taps and since_last_tap + current_width > Row.tap_distance:
                         fills.append(Row.tap_width)
                         since_last_tap = 0
                         current -= Row.tap_width
@@ -185,3 +190,12 @@ class Row(object):
                 )
                 r.place(fill_cell, ignore_tap=True)
                 r.fill_counter += 1
+
+    @staticmethod
+    def make_fill(row: int, inst: int, size:int):
+         fill_cell = Row.create_fill(
+             "fill_%i_%i" % (row, inst),
+             Row.supported_fill_sizes[size]
+         )
+         return fill_cell
+

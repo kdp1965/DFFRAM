@@ -55,3 +55,33 @@ module DFFRF_2R1W #(parameter   WSIZE=32,
         end
 	endgenerate
 endmodule
+
+module DFFRF_R8_2R1W #(parameter   WSIZE=32,
+                                   RCOUNT=8,
+                                   R0_ZERO=1 )
+(
+	input   wire    [2:0]                   RA, RB, RW,
+	input   wire    [WSIZE-1:0]         	DW,
+	output  wire    [WSIZE-1:0]        	DA, DB,
+	input   wire                            CLK,
+	input   wire                            WE
+);
+	wire [RCOUNT-1:0] sel1, sel2, selw;
+
+	DEC3x8 DEC0 ( .A(RA), .SEL(sel1) );
+	DEC3x8 DEC1 ( .A(RB), .SEL(sel2) );
+	DEC3x8 DEC2 ( .A(RW), .SEL(selw) );
+	
+	generate
+		genvar e;
+        if(R0_ZERO == 1)
+            RFWORD0 #(.WSIZE(WSIZE)) RFW0 ( .CLK(CLK), .SEL1(sel1[0]), .SEL2(sel2[0]), .SELW(selw[0]), .D1(DA), .D2(DB));	
+        else
+            RFWORD #(.WSIZE(WSIZE)) RFW0 ( .CLK(CLK), .WE(WE), .SEL1(sel1[0]), .SEL2(sel2[0]), .SELW(selw[0]), .D1(DA), .D2(DB), .DW(DW) );
+
+        for(e=1; e<RCOUNT; e=e+1) begin : REGF 
+			RFWORD #(.WSIZE(WSIZE)) RFW ( .CLK(CLK), .WE(WE), .SEL1(sel1[e]), .SEL2(sel2[e]), .SELW(selw[e]), .D1(DA), .D2(DB), .DW(DW) );	
+        end
+	endgenerate
+endmodule
+

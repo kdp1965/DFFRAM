@@ -52,6 +52,9 @@ class Placeable(object):
         for instance in instances:
             n = instance.getName()
             found = False
+#            print(f'Instance: {n}')
+#            for sieve in sieves:
+#                print(f'sieve: {sieve}  {sieve.variable}')
             for sieve in sieves:
                 rx = compiled_regexes[sieve.variable]
                 result = rx.search(n)

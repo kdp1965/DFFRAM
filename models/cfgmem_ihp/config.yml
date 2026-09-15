@@ -1,0 +1,7 @@
+widths: [32]
+counts: [16]
+design_name_template: "CFGMEM_IHP{count}{variant}"
+# placeram hierarchy class used to place this model (see placeram/data.py)
+placer: IhpCfgMem_16
+variants:
+  - null

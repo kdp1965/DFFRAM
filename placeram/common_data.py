@@ -88,16 +88,22 @@ class Mux(Placeable):
 
 class Decoder3x8(Placeable):
     def __init__(self, instances: List[Instance]):
+        and_gates = {}
+        def process_and(instance, bit):
+            bit = int(bit) 
+            and_gates[bit] = instance
+
         self.sieve(
             instances,
             [
                 S(variable="enbuf"),
-                S(variable="and_gates", groups=["gate"]),
+                S(variable="and_gates", groups=["gate"], custom_behavior=process_and),
                 S(variable="abufs", groups=["address_bit"]),
                 S(variable="invs", groups=["gate"]),
             ],
         )
         self.dicts_to_lists()
+        self.and_gates = and_gates
 
     def place(self, row_list: List[Row], start_row: int = 0):
         """
@@ -109,16 +115,53 @@ class Decoder3x8(Placeable):
         buffers_placeable = [*self.abufs, self.enbuf, None, None, None, None]
         invs_placeable = self.invs
 
-        for i in range(8):
-            r = row_list[start_row + i]
-            r.place(ands_placeable[i])
+        current_row = start_row
+        r = row_list[current_row]
+        for i in range(3):
             buf = buffers_placeable[i]
+            r.place(buf)
+        r.place(self.enbuf)
+        current_row += 1
+
+        for i in range(8):
+            print(f'Placing 3x8 mux, current_row = {current_row}')
+            r = row_list[current_row]
+            r.place(ands_placeable[i])
             if i < len(self.invs):
                 r.place(invs_placeable[i])
-            if buf is not None:
-                r.place(buf)
+            current_row += 1
+            if i == 3:
+                current_row += 1
 
         return start_row + 8
+
+class Decoder1x2(Placeable):
+    def __init__(self, instances):
+        self.sieve(
+            instances,
+            [
+                S(
+                    variable="and_gates",
+                    groups=["address_bit"],
+                ),
+                S(
+                    variable="invs",
+                    groups=["address_bit"],
+                ),
+            ],
+        )
+        self.dicts_to_lists()
+
+    def place(self, row_list, start_row=0):
+        r = row_list[start_row]
+        for i in range(
+            2
+        ):  # range is 2 because 1x2 has 2 AND gates put on on top of each other
+            r.place(self.and_gates[i])
+            if i < len(self.invs):
+                r.place(self.invs[i])
+
+        return start_row + 1
 
 
 class Decoder2x4(Placeable):
@@ -149,6 +192,53 @@ class Decoder2x4(Placeable):
 
         return start_row + 4
 
+
+class Decoder4x16(Placeable):
+    def __init__(self, instances):
+        raw_d1x2 = []
+
+        def process_d1x2_element(instance):
+            raw_d1x2.append(instance)
+
+        raw_d3x8 = {}
+
+        def process_d3x8_element(instance, decoder):
+            raw_d3x8[decoder] = raw_d3x8.get(decoder) or []
+            raw_d3x8[decoder].append(instance)
+
+        self.enbuf = None
+        self.sieve(
+            instances,
+            [
+                S(variable="decoder1x2", custom_behavior=process_d1x2_element),
+                S(
+                    variable="decoders3x8",
+                    groups=["decoder"],
+                    custom_behavior=process_d3x8_element,
+                ),
+            ],
+        )
+
+        self.dicts_to_lists()
+
+        self.decoders3x8 = d2a({k: Decoder3x8(v) for k, v in raw_d3x8.items()})
+        self.decoder1x2 = Decoder1x2(raw_d1x2)
+
+    def place(self, row_list, start_row=0, decoder1x2_start_row=0, flip=False):
+        r = row_list[start_row]
+
+        if flip:
+            self.decoder1x2.place(row_list, decoder1x2_start_row)
+            for idx in range(len(self.decoders3x8)):
+                self.decoders3x8[idx].place(row_list, idx * 8+5)
+            # Row.fill_rows(row_list, start_row, current_row)
+
+        else:
+            for idx in range(len(self.decoders3x8)):
+                self.decoders3x8[idx].place(row_list, idx * 10)
+
+            self.decoder1x2.place(row_list, decoder1x2_start_row + 5)
+        return start_row + 16  # 4x16 has 2 3x8 on top of each other and each is 8 rows
 
 class Decoder5x32(Placeable):
     def __init__(self, instances):

@@ -4,6 +4,8 @@ Mux:
   sel_diodes: \bSEL_DIODE\\\[(\d+)\\\]
   muxes: \bM\\\[(\d+)\\\]\.MUX\\\[(\d+)\\\]
   mux_input_diodes: \bM\\\[(\d+)\\\]\.DIODE_A(\d+)MUX\\\[(\d+)\\\]
+Decoder1x2:
+  and_gates: \bAND(\d+)\b
 Decoder2x4:
   and_gates: \bAND(\d+)\b
   invs: \bINV(\d+)\b
@@ -12,6 +14,9 @@ Decoder3x8:
   abufs: \bABUF\\\[(\d+)\\\]
   enbuf: \bENBUF\b
   invs: \bINV(\d+)\b
+Decoder4x16:
+  decoders3x8: \bD(\d+)\b
+  decoder1x2: \bD\b
 Decoder5x32:
   decoders3x8: \bD(\d+)\b
   decoder2x4: \bD\b
@@ -39,6 +44,12 @@ Slice:
   words: \bWORD\\\[(\d+)\\\]
   decoders: \bDEC(\d+)\b
   tiezero: \bTIE_ZERO_zero_\b
+CfgSlice:
+  cfg_bit: \bCWORD.CFG_BIT\\\[(\d+\\)\].STORAGE
+  cfg_diode: \bCWORD.DIODE_LE0
+  seldiode: \bDIODE_SEL1
+  selbuf: \bSELBUF
+  rowand: \bROW_AND
 Outreg:
   root_clkbuf: \bRoot_CLKBUF\b
   clkbufs: \bDo_CLKBUF\\\[(\d+)\\\]
@@ -58,6 +69,41 @@ Slice_16:
   fbufenbufs: \bFBUFENBUF(\d+)\\\[(\d+)\\\].__cell__
   floatbufs: \bBYTE\\\[(\d+)\\\]\.FLOATBUF(\d+)\\\[(\d+)\\\].__cell__
   floatbufsinvs: \bBYTE\\\[(\d+)\\\]\.FLOATBUF(\d+)\\\[(\d+)\\\].TE_BINV
+  decoder_invs: \bDEC(\d+)\.INV(\d+)\b
+CfgMem_16:
+  cfg_slices: \SLICE\\\[(\d+)\\\]
+  clk_diode: \bDIODE_CLK\b
+  bypbuf: \bBYPBUF\b
+  decoders: \bDEC(\d+)\b
+  a_diodes: \bDIODE_A(\d+)\\\[(\d+)\\\]
+  abufs: \bA(\d+)BUF\\\[(\d+)\\\].__cell__
+  enbufs: \bEN(\d+)BUF.__cell__
+  out_nand: \bOUT_NAND\\\[(\d+)\\\].QUAD_NAND
+  out_mux: \bOUT_NAND\\\[(\d+)\\\].OUT_MUX
+  quad_a21boi: \bQUADS\\\[(\d+)\\\].\bQBIT\\\[(\d+)\\\].QUAD_A21BOI
+  quad_a222oi: \bQUADS\\\[(\d+)\\\].\bQBIT\\\[(\d+)\\\].QUAD_A222OI
+IhpCfgSlice:
+  cfg_bit: \bCWORD\.CFG_BIT\\\[(\d+)\\\]\.STORAGE
+  cfg_diode: \bCWORD\.DIODE_LE0
+  seldiode: \bDIODE_SEL1
+  selbuf: \bSELBUF
+  rowand: \bROW_AND
+IhpCfgMem_16:
+  cfg_slices: \bSLICE\\\[(\d+)\\\]
+  bypbuf: \bBYPBUF\b
+  decoders: \bDEC(\d+)\b
+  a_diodes: \bDIODE_A(\d+)\\\[(\d+)\\\]
+  abufs: \bA(\d+)BUF\\\[(\d+)\\\]\.__cell__
+  out_nand: \bOUT_NAND\\\[(\d+)\\\]\.QUAD_NAND
+  out_mux: \bOUT_NAND\\\[(\d+)\\\]\.OUT_MUX
+  quad_a22oi: \bQUADS\\\[(\d+)\\\]\.QBIT\\\[(\d+)\\\]\.QUAD_A22OI(\d+)
+  quad_and: \bQUADS\\\[(\d+)\\\]\.QBIT\\\[(\d+)\\\]\.QUAD_AND
+Old:
+  webufs: \bWEBUF\\\[(\d+)\\\].__cell__
+  doregs: \bDo(\d+)_REG\b
+  decoder_ands: \bDEC(\d+)\.AND(\d+)\b
+  decoder_abufs: \bDEC(\d+)\.\bABUF\\\[(\d+)\\\]
+  decoder_enbufs: \bDEC(\d+)\.\bENBUF
   decoder_invs: \bDEC(\d+)\.INV(\d+)\b
 Block:
   slice_16: \SLICE_16\\\[(\d+)\\\]

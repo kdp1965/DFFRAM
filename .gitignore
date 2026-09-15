@@ -31,3 +31,7 @@ support/
 venv/
 /products_path
 /products
+# local tool environments and run outputs
+.venv/
+.venvunset/
+tile_trial/runs/

@@ -1,0 +1,72 @@
+# IHP SG13CMOS5L (130 nm, 5 metal layers: Metal1-4 + TopMetal1).
+# Library sg13cmos5l_stdcell: same cells, pins and geometry as sg13g2_stdcell.
+# Only the cfgmem_ihp* building blocks are ported; see block_definitions.v.
+#
+# The PDK is not distributed through ciel: run dffram.py with --manual-pdk and
+# $PDK_ROOT/ihp-sg13cmos5l present (see Readme).
+
+# sg13cmos5l cells carry their own well/substrate taps: no tap cells.
+tap_distance: 0
+metal_layers:
+  hor-layer: Metal3
+  ver-layer: Metal2
+  # Tiny Tapeout CMOS5L tiles route up to Metal4 and carry their PDN on
+  # Metal4 stripes, so the macro stops at Metal3 (like met3 under sky130).
+  rt-max-layer: Metal3
+site:
+  width: 0.48
+  height: 3.78
+  name: CoreSite
+tie:
+  tie_lo_cell: sg13cmos5l_tielo
+  tie_lo_port: L_LO
+  tie_hi_cell: sg13cmos5l_tiehi
+  tie_hi_port: L_HI
+sta:
+  driving_cell:
+    name: sg13cmos5l_buf_4
+    pin: "X"
+  libs:
+    typical: sg13cmos5l_stdcell_typ_1p20V_25C.lib
+    slow: sg13cmos5l_stdcell_slow_1p08V_125C.lib
+    fast: sg13cmos5l_stdcell_fast_1p32V_m40C.lib
+  clock_periods:
+    cfgmem_ihp: {}
+    cfgmem_ihp_left: {}
+    ram: {}
+    rf: {}
+fills:
+  decap: sg13cmos5l_decap_(\d+)
+  fill: sg13cmos5l_fill_(\d+)
+  tap: null
+  diode: sg13cmos5l_antennanp
+# Extra LibreLane configuration merged into the flow config for this platform.
+flow_config:
+  # The PDK's SCL config gives DIODE_CELL without the pin; LibreLane's diode
+  # insertion steps need "cell/pin" (as the sg13g2 config provides).
+  DIODE_CELL: sg13cmos5l_antennanp/A
+  # The pinned PDK's KLayout DRC deck is unusable (its rule includes have to
+  # be stripped, leaving no checks). The deck vendored in the IHP-Open-PDK
+  # dev branch is self-contained and runs on this Magic-independent tool, so
+  # use it when the dev checkout described in the Readme is present.
+  KLAYOUT_DRC_RUNSET: $PDK_ROOT/ihp-open-pdk-dev/ihp-sg13cmos5l/libs.tech/klayout/tech/drc/ihp-sg13cmos5l.drc
+  # Single-layer PDN in the style of the Tiny Tapeout CMOS5L tile template
+  # (Metal4 vertical stripes, 2.1 um wide, PDK offset 10 um), but on the
+  # power-column grid of the IHP 1P SRAM macros so a tile can stack these
+  # macros above an SRAM and run one set of full-height stripes through
+  # both: the SRAM alternates VDD / VSS columns every 5.62 um (same-polarity
+  # pitch 11.24), so the pair spacing puts VGND 5.62 um from VPWR
+  # (2.1 + 3.52) and the pitch is 4 x 11.24 = 44.96 um.  The template's own
+  # 50 um pitch drifts 5.04 um per stripe against that grid.  Rails land at
+  # 11.44 + 44.96k (VPWR) and 17.06 + 44.96k (VGND) from the macro origin;
+  # place the macro at x = 1.44 + 44.96k in a tile using the same settings.
+  PDN_VERTICAL_LAYER: Metal4
+  PDN_VWIDTH: 2.1
+  PDN_VPITCH: 44.96
+  PDN_VSPACING: 3.52
+  PDN_VOFFSET: 10
+  # Let the parent design route through the macro's unused Metal3 tracks:
+  # obstructions on this layer follow the actual wires (see
+  # DFFRAM.WriteAbstractLEF in dffram.py); the top routing layer only carries
+  # the power stripes as pins and is open anyway.
+  LEF_ROUTE_THROUGH_LAYERS: [Metal3]

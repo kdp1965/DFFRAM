@@ -1,0 +1,71 @@
+{
+  "DESIGN_NAME": "tt_um_cfgmem_trial",
+  "VERILOG_FILES": ["dir::src/tt_um_cfgmem_trial.v"],
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 20,
+
+  "//": "Tiny Tapeout CMOS5L 2x2 tile (tt-support-tools ihp-sg13cmos5l branch)",
+  "DIE_AREA": [0, 0, 419.52, 313.74],
+  "FP_SIZING": "absolute",
+  "FP_DEF_TEMPLATE": "dir::tt_block_2x2_pgvdd.def",
+  "VDD_PIN": "VPWR",
+  "GND_PIN": "VGND",
+  "RT_MAX_LAYER": "Metal4",
+  "PL_TARGET_DENSITY_PCT": 60,
+  "PL_RESIZER_HOLD_SLACK_MARGIN": 0.1,
+  "GRT_RESIZER_HOLD_SLACK_MARGIN": 0.05,
+  "RUN_LINTER": false,
+  "DESIGN_REPAIR_BUFFER_OUTPUT_PORTS": false,
+  "TOP_MARGIN_MULT": 1,
+  "BOTTOM_MARGIN_MULT": 1,
+  "LEFT_MARGIN_MULT": 6,
+  "RIGHT_MARGIN_MULT": 6,
+  "GRT_ALLOW_CONGESTION": true,
+  "FP_IO_HLENGTH": 2,
+  "FP_IO_VLENGTH": 2,
+  "FP_PDN_VPITCH": 50.0,
+  "FP_PDN_VWIDTH": 2.1,
+  "FP_PDN_MULTILAYER": false,
+  "RUN_CTS": true,
+  "MAGIC_DEF_LABELS": false,
+  "MAGIC_WRITE_LEF_PINONLY": true,
+  "RUN_KLAYOUT_XOR": false,
+  "RUN_KLAYOUT_DRC": true,
+
+  "//": "PDK quirk at the pinned cmos5l commit: DIODE_CELL lacks its pin",
+  "DIODE_CELL": "sg13cmos5l_antennanp/A",
+
+  "//": "pdngen's own connectivity check runs before Tile.ExtendPowerStripes bridges the macro pins; the IR-drop PSM check and LVS are the real verdicts",
+  "ERROR_ON_PDN_VIOLATIONS": false,
+
+  "//": "Force north-south routes to cross the macro: keep the channels beside it free of cells and block the vertical layers there (Metal3 stays open so the macro's west-edge pins remain reachable)",
+  "TILE_PLACEMENT_BLOCKAGES": [
+    [0, 71.82, 51.44, 166.32],
+    [382.64, 71.82, 419.52, 166.32]
+  ],
+  "ROUTING_OBSTRUCTIONS": [
+    ["Metal2", 0, 75.6, 51.44, 162.54],
+    ["Metal4", 0, 75.6, 51.44, 162.54],
+    ["Metal2", 382.64, 75.6, 419.52, 162.54],
+    ["Metal4", 382.64, 75.6, 419.52, 162.54]
+  ],
+
+  "//": "Macro at x = 1.44 + 50 so its Metal4 stripes coincide with the tile grid; y on a row boundary",
+  "FP_MACRO_HORIZONTAL_HALO": 3,
+  "FP_MACRO_VERTICAL_HALO": 3,
+  "PDN_MACRO_CONNECTIONS": ["cfgmem VPWR VGND VPWR VGND"],
+  "MACROS": {
+    "CFGMEM_IHP16": {
+      "instances": { "cfgmem": { "location": [51.44, 75.6], "orientation": "N" } },
+      "gds":  ["dir::../products/CFGMEM_IHP16/gds/CFGMEM_IHP16.gds"],
+      "lef":  ["dir::../products/CFGMEM_IHP16/lef/CFGMEM_IHP16.lef"],
+      "nl":   ["dir::../products/CFGMEM_IHP16/nl/CFGMEM_IHP16.nl.v"],
+      "spef": { "nom_*": ["dir::../products/CFGMEM_IHP16/spef/nom/CFGMEM_IHP16.nom.spef"] },
+      "lib": {
+        "nom_typ_1p20V_25C":  ["dir::../products/CFGMEM_IHP16/lib/nom_typ_1p20V_25C/CFGMEM_IHP16__nom_typ_1p20V_25C.lib"],
+        "nom_fast_1p32V_m40C": ["dir::../products/CFGMEM_IHP16/lib/nom_fast_1p32V_m40C/CFGMEM_IHP16__nom_fast_1p32V_m40C.lib"],
+        "nom_slow_1p08V_125C": ["dir::../products/CFGMEM_IHP16/lib/nom_slow_1p08V_125C/CFGMEM_IHP16__nom_slow_1p08V_125C.lib"]
+      }
+    }
+  }
+}
