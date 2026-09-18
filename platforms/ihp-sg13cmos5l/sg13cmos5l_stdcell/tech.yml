@@ -69,4 +69,4 @@ flow_config:
   # obstructions on this layer follow the actual wires (see
   # DFFRAM.WriteAbstractLEF in dffram.py); the top routing layer only carries
   # the power stripes as pins and is open anyway.
-  LEF_ROUTE_THROUGH_LAYERS: [Metal3]
+  LEF_ROUTE_THROUGH_LAYERS: [Metal2, Metal3]

@@ -409,6 +409,65 @@ GATED_RUN_VARS = [
 
 
 @Flow.factory.register()
+@Step.factory.register()
+class PinsToLayer(Odb.OdbpyStep):
+    """
+    Moves the bottom-edge shapes of selected pins to another vertical layer
+    (scripts/odbpy/pins_to_layer.py), dodging that layer's power stripes.
+    A no-op unless PINS_TO_LAYER_REGEX is set.
+    """
+
+    id = "DFFRAM.PinsToLayer"
+    name = "Pins to Layer"
+
+    config_vars = [
+        Variable(
+            "PINS_TO_LAYER_REGEX",
+            Optional[str],
+            "Pins (regex) whose bottom-edge shapes move from IO_PIN_V_LAYER to "
+            "PINS_TO_LAYER.  Unset leaves the pins as placed.",
+        ),
+        Variable(
+            "PINS_TO_LAYER",
+            str,
+            "Layer the selected pins are moved to.",
+            default="Metal4",
+        ),
+        Variable(
+            "PINS_TO_LAYER_FROM",
+            str,
+            "Layer the selected pins are on before the move (the vertical pin layer).",
+            default="Metal2",
+        ),
+        Variable(
+            "PINS_TO_LAYER_CLEARANCE",
+            Decimal,
+            "Spacing kept from power stripes and other pins on that layer.",
+            units="µm",
+            default=0.3,
+        ),
+    ]
+
+    def get_script_path(self):
+        return os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "scripts", "odbpy", "pins_to_layer.py"
+        )
+
+    def get_command(self) -> List[str]:
+        return super().get_command() + [
+            "--pins", self.config["PINS_TO_LAYER_REGEX"],
+            "--layer", self.config["PINS_TO_LAYER"],
+            "--from-layer", self.config["PINS_TO_LAYER_FROM"],
+            "--clearance", str(self.config["PINS_TO_LAYER_CLEARANCE"]),
+        ]
+
+    def run(self, state_in, **kwargs):
+        if not self.config["PINS_TO_LAYER_REGEX"]:
+            info("PINS_TO_LAYER_REGEX is unset: pins left as placed.")
+            return {}, {}
+        return super().run(state_in, **kwargs)
+
+
 class DFFRAM(SequentialFlow):
     Steps = [
         Yosys.Synthesis,
@@ -421,6 +480,7 @@ class DFFRAM(SequentialFlow):
         OpenROAD.IOPlacement,
         Odb.CustomIOPlacement,
         OpenROAD.GeneratePDN,
+        PinsToLayer,
         OpenROAD.STAMidPNR,
         OpenROAD.GlobalRouting,
 
@@ -540,6 +600,12 @@ class DFFRAM(SequentialFlow):
     type=Decimal,
     help="Minimum height in µm",
 )
+@cloup.option(
+    "--pins-to-metal4",
+    default=None,
+    help="Regex of pins whose bottom-edge shapes go on Metal4 instead of the "
+    "vertical pin layer (routing then reaches Metal4 for pin access only)",
+)
 @cloup_flow_opts(accept_config_files=False)
 @cloup.argument("size", default="32x32", nargs=1)
 def main(
@@ -559,6 +625,7 @@ def main(
     vertical_halo,
     default_clock_period,
     min_height,
+    pins_to_metal4,
     build_dir,
     products_dir,
     flow_name,
@@ -664,6 +731,24 @@ def main(
                 continue
         platform_flow_config[key] = value
 
+    # Data pins on Metal4 (experiment): the router may use Metal4, but only
+    # grudgingly (90% capacity reduction) so it reaches the pins and little
+    # else, and whatever it does draw there becomes an obstruction in the
+    # abstract instead of leaving Metal4 open.
+    variant_config = {}
+    if pins_to_metal4:
+        through = list(platform_flow_config.get("LEF_ROUTE_THROUGH_LAYERS") or [])
+        if "Metal4" not in through:
+            through.append("Metal4")
+        variant_config = {
+            "PINS_TO_LAYER_REGEX": pins_to_metal4,
+            "PINS_TO_LAYER": "Metal4",
+            "PINS_TO_LAYER_FROM": tech_info["metal_layers"]["ver-layer"],
+            "RT_MAX_LAYER": "Metal4",
+            "GRT_LAYER_ADJUSTMENTS": [0, 0, 0, Decimal("0.9"), 0],
+            "LEF_ROUTE_THROUGH_LAYERS": through,
+        }
+
     TargetFlow = Flow.factory.get(flow_name) or DFFRAM
     dffram_flow = TargetFlow(
         {
@@ -704,6 +789,7 @@ def main(
             # PDN
             "DESIGN_IS_CORE": False,
             **platform_flow_config,
+            **variant_config,
         },
         design_dir=os.path.abspath(build_dir),
         pdk_root=pdk_root,

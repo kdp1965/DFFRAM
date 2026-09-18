@@ -21,6 +21,16 @@ cfgmem16_cmos5l:
 left_cmos5l:
 	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left 16x32"
 
+# Bottom-edge data pins on Metal4 (the tile's under-used vertical layer)
+# instead of Metal2, dodging the power stripes.  M4_PINS selects them:
+# the Do0 pins by default, `M4_PINS='^D[io]0\\['` for Di0 as well.
+M4_PINS ?= ^Do0\\[
+cfgmem16_cmos5l_m4:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp --pins-to-metal4 '$(M4_PINS)' 16x32"
+
+left_cmos5l_m4:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_PINS)' 16x32"
+
 # IHP SG13G2 (ihp-sg13g2 PDK, sg13g2_stdcell library). Same models and design
 # names as CMOS5L, so the outputs go to build/ihp-sg13g2 and products/ihp-sg13g2.
 cfgmem16_sg13g2:
