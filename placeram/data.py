@@ -981,12 +981,12 @@ class HigherLevelPlaceable(LRPlaceable):
         return len(self.blocks) * (self.blocks[0].word_count())
 
 
-def create_hierarchy(instances, word_count, left, placer=None):
+def create_hierarchy(instances, word_count, left, placer=None, channels=None):
     hierarchy = None
     if placer == "IhpCfgMem_16":
         from .ihp_cfgmem_data import IhpCfgMem_16
 
-        hierarchy = IhpCfgMem_16(instances, left)
+        hierarchy = IhpCfgMem_16(instances, left, channels)
     elif placer is not None:
         raise DataError("Unknown placer '%s' requested by model config." % placer)
     elif word_count == 1:

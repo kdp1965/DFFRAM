@@ -67,12 +67,51 @@ def skip(r: Row, count: int):
 class ColumnGeometry:
     """Site counts shared by every row so the bit columns line up."""
 
-    def __init__(self, prefix: int, pitch: int, mid: int, split: int, slack: int):
+    def __init__(
+        self,
+        prefix: int,
+        pitch: int,
+        mid: int,
+        split: int,
+        slack: int,
+        channels: Dict[int, int] = None,
+    ):
         self.prefix = prefix  # sites reserved at the start of every row
         self.pitch = pitch  # sites per bit column (widest cell group + slack)
         self.mid = mid  # sites of the mid-row gap (diodes live here)
         self.split = split  # bit index before which the mid gap is placed
         self.slack = slack  # empty sites left in every bit column
+        # Route-through channels: bit index -> sites of decap placed before
+        # that bit column in every array row.  The parent design's router
+        # gets the vertical tracks over them (the placer obstructs them for
+        # the macro's own routing, see Placer.obstruct_channels), so a net
+        # crossing the macro can hop between the Metal3 openings the
+        # internal wiring leaves instead of needing one continuous track.
+        self.channels = channels or {}
+
+
+def place_channel(r: Row, geo: ColumnGeometry, bit: int, rects: List = None):
+    """Decap fill for the channel before `bit`, if the geometry has one."""
+    sites_wanted = geo.channels.get(bit)
+    if not sites_wanted:
+        return
+    x0 = r.x
+    remaining = sites_wanted
+    for size in Row.supported_fill_sizes:
+        while remaining >= size:
+            # Locked, or the diode insertion's legaliser shoves its diodes in
+            # here, whose pins the obstructed Metal2 then cannot reach.
+            r.place(
+                Row.create_fill("chan_%i_%i" % (r.ordinal, r.fill_counter), size),
+                ignore_tap=True,
+                fixed=True,
+            )
+            r.fill_counter += 1
+            remaining -= size
+    if remaining:
+        skip(r, remaining)
+    if rects is not None:
+        rects.append((x0, r.x))
 
 
 class IhpCfgSlice(Placeable):
@@ -115,6 +154,7 @@ class IhpCfgSlice(Placeable):
             skip(r, geo.prefix - sites(self.rowand))
 
         for i in range(len(self.bits)):
+            place_channel(r, geo, i)
             if i == geo.split:
                 used = 0
                 for d in [self.cfg_diode, self.seldiode]:
@@ -142,8 +182,16 @@ class IhpCfgMem_16(Placeable):
     WORDS = 16
     WORDS_PER_QUAD = 4
 
-    def __init__(self, instances: List[Instance], left: bool):
+    def __init__(
+        self,
+        instances: List[Instance],
+        left: bool,
+        channels: Dict[int, int] = None,
+    ):
         self.left = left
+        self.channels = channels or {}
+        # (x0, x1) in DBU of each channel, taken from the first array row
+        self.channel_rects: List = []
         raw_slices: Dict[int, List[Instance]] = {}
         raw_decoders: Dict[str, List[Instance]] = {}
         quad_a22oi: Dict[int, Dict[int, Dict[int, Instance]]] = {}
@@ -246,14 +294,16 @@ class IhpCfgMem_16(Placeable):
         prefix = 0 if self.left else max(sites(s.rowand) for s in self.slices)
         mid = max(s.mid_width() for s in self.slices)
         split = len(self.out_cells) // 2
-        return ColumnGeometry(prefix, pitch, mid, split, slack)
+        return ColumnGeometry(prefix, pitch, mid, split, slack, self.channels)
 
     def place_bit_row(
         self, r: Row, row_idx: int, cells_per_bit: List[List[Instance]], geo: ColumnGeometry
     ):
         """Place one cell group per bit column, padded to the column pitch."""
         skip(r, geo.prefix)
+        rects = self.channel_rects if not self.channel_rects else None
         for i, cells in enumerate(cells_per_bit):
+            place_channel(r, geo, i, rects)
             if i == geo.split:
                 skip(r, geo.mid)
             used = 0

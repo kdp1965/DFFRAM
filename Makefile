@@ -31,8 +31,31 @@ cfgmem16_cmos5l_m4:
 left_cmos5l_m4:
 	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_PINS)' 16x32"
 
+# Route-through channels: four 8-site (3.84 um) decap columns through the
+# array, before bits 6, 13, 19 and 26, with the macro's own routing kept off
+# Metal2 and Metal4 there, so the tile's router gets continuous vertical
+# tracks to hop between the Metal3 openings inside the macro.
+CHANNELS ?= 6,13,19,26
+cfgmem16_cmos5l_ch:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp --pins-to-metal4 '$(M4_PINS)' --channels '$(CHANNELS)' 16x32"
+
+left_cmos5l_ch:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_PINS)' --channels '$(CHANNELS)' 16x32"
+
 # IHP SG13G2 (ihp-sg13g2 PDK, sg13g2_stdcell library). Same models and design
 # names as CMOS5L, so the outputs go to build/ihp-sg13g2 and products/ihp-sg13g2.
+# Tiny Tapeout 5x4 sg13g2 tile variant (../ihp-sg13g2-janestreet-prism): data
+# pins on Metal4, power rails on the tile's 38.87 um TopMetal1 stripe grid for
+# a LEFT16 column at x 2.88 and an IHP16 column at x 737.76 (see tech.yml).
+cfgmem16_sg13g2_m4:
+	$(NIX_RUN) "python3 dffram.py -p ihp-sg13g2 -s sg13g2_stdcell -b cfgmem_ihp --build-dir build/ihp-sg13g2 --products-dir products/ihp-sg13g2 --pins-to-metal4 '$(M4_PINS)' -c PDN_VOFFSET=$(IHP16_VOFFSET) 16x32"
+
+left_sg13g2_m4:
+	$(NIX_RUN) "python3 dffram.py -p ihp-sg13g2 -s sg13g2_stdcell -b cfgmem_ihp_left --left --build-dir build/ihp-sg13g2 --products-dir products/ihp-sg13g2 --pins-to-metal4 '$(M4_PINS)' -c PDN_VOFFSET=$(LEFT16_VOFFSET) 16x32"
+
+IHP16_VOFFSET  ?= 15.81
+LEFT16_VOFFSET ?= 12.16
+
 cfgmem16_sg13g2:
 	$(NIX_RUN) "python3 dffram.py -p ihp-sg13g2 -s sg13g2_stdcell -b cfgmem_ihp --build-dir build/ihp-sg13g2 --products-dir products/ihp-sg13g2 16x32"
 

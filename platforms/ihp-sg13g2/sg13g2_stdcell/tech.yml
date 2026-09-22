@@ -40,8 +40,20 @@ fills:
   diode: sg13g2_antennanp
 # Extra LibreLane configuration merged into the flow config for this platform.
 flow_config:
+  # Single-layer PDN in the style of the Tiny Tapeout sg13g2 tile template
+  # (TopMetal1 vertical stripes, PDK width 2.2 / spacing 4.0, template pitch
+  # 38.87).  Rails land at 1.44 + PDN_VOFFSET + 38.87k (VPWR centre) and
+  # +6.2 (VGND) from the macro origin; the tile's stripes sit at core x0 +
+  # 13.6 + 38.87k, so pick the offset per build (-c PDN_VOFFSET=...) from the
+  # macro's x position in the tile, e.g. 12.16 for a macro at x 2.88 (core
+  # x0 2.88) and 15.81 for one at x 737.76.
+  PDN_VERTICAL_LAYER: TopMetal1
+  PDN_VWIDTH: 2.2
+  PDN_VPITCH: 38.87
+  PDN_VSPACING: 4.0
+  PDN_VOFFSET: 13.6
   # Let the parent design route through the macro's unused Metal3 tracks:
   # obstructions on this layer follow the actual wires (see
   # DFFRAM.WriteAbstractLEF in dffram.py); the top routing layer only carries
   # the power stripes as pins and is open anyway.
-  LEF_ROUTE_THROUGH_LAYERS: [Metal3]
+  LEF_ROUTE_THROUGH_LAYERS: [Metal2, Metal3]

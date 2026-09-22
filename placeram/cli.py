@@ -63,7 +63,11 @@ class Placer:
         fill_cell_data,
         tap_distance,
         placer=None,
+        channels=None,
+        channel_layers=None,
     ):
+        self.channels = channels or {}
+        self.channel_layers = channel_layers or []
         # Initialize Database
         self.db = odb.dbDatabase.create()
 
@@ -146,7 +150,7 @@ class Placer:
             self.hierarchy = DFFRF(self.instances)
         else:
             self.hierarchy = data.create_hierarchy(
-                self.instances, word_count, self.left, placer
+                self.instances, word_count, self.left, placer, self.channels
             )
 
         self.fill_cell_data = fill_cell_data
@@ -160,6 +164,7 @@ class Placer:
         last_row = self.hierarchy.place(self.rows)
         print(f"Placement concluded with {last_row} rows...")
         Row.fill_rows(self.rows, 0, last_row)
+        self.obstruct_channels(last_row)
 
         # We can't rely on the fact that a placeable will probably fill
         # before returning and pick the width of the nth row or whatever.
@@ -207,6 +212,37 @@ class Placer:
         eprint("Density: %.2f%%" % (self.density * 100))
         eprint("Done.")
 
+    def obstruct_channels(self, last_row):
+        """Routing obstructions over the route-through channels, full core
+        height, on the layers the parent design should get (Metal2 for the
+        vertical hops, Metal4 too so nothing of the macro's lands there).
+        DFFRAM.RemoveChannelObstructions drops them again after detailed
+        routing so they do not reach the abstract."""
+        rects = getattr(self.hierarchy, "channel_rects", None) or []
+        if not rects or not self.channel_layers:
+            return
+        tech = self.db.getTech()
+        # Row 0 is the pin side (the S-edge Di0/Do0 pins are spread evenly
+        # along the face, so some land inside a channel): leave that row
+        # open so their escapes can turn onto Metal3, obstruct from row 1 up.
+        first = 1 if last_row > 1 else 0
+        y0 = self.rows[first].ymin
+        y1 = self.rows[last_row - 1].ymax
+        for layer_name in self.channel_layers:
+            layer = tech.findLayer(layer_name)
+            if layer is None:
+                eprint("Channel obstruction layer %s not found!" % layer_name)
+                exit(-1)
+            for x0, x1 in rects:
+                odb.dbObstruction_create(self.block, layer, int(x0), y0, int(x1), y1)
+        u = self.micron_in_units
+        eprint(
+            "Route-through channels (um): "
+            + ", ".join("%.2f..%.2f" % (x0 / u, x1 / u) for x0, x1 in rects)
+            + " obstructed on "
+            + ", ".join(self.channel_layers)
+        )
+
     def write_db(self, output):
         return odb.write_db(self.db, output) == 1
 
@@ -248,17 +284,41 @@ def check_readable(file):
     multiple=True,
     type=str,
 )
+@click.option(
+    "--channels",
+    default="",
+    help="Route-through channels: comma-separated bit indices before which a "
+    "decap channel is placed in every array row (IhpCfgMem_16 only)",
+)
+@click.option(
+    "--channel-sites",
+    default=8,
+    type=int,
+    help="Width of each route-through channel in sites",
+)
+@click.option(
+    "--channel-layers",
+    default="Metal2,Metal4",
+    help="Layers obstructed over the channels for the macro's own routing",
+)
 @click.argument("odb_in", required=True, nargs=1)
 def cli(
     output_odb,
     output_def,
     input_lef,
+    channels,
+    channel_sites,
+    channel_layers,
     size,
     left,
     represent,
     building_blocks,
     odb_in,
 ):
+    channel_dict = {
+        int(b): channel_sites for b in channels.split(",") if b.strip() != ""
+    }
+    channel_layer_list = [l for l in channel_layers.split(",") if l.strip() != ""]
     pdk, scl, blocks = building_blocks.split(":")
     platform_tech_file = os.path.join(".", "platforms", pdk, scl, "tech.yml")
     if not os.path.isfile(platform_tech_file):
@@ -304,6 +364,8 @@ def cli(
         fill_cell_data,
         tap_distance,
         placer,
+        channel_dict,
+        channel_layer_list,
     )
 
     if represent is not None:

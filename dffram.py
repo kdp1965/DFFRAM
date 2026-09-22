@@ -57,6 +57,26 @@ class PlaceRAM(Odb.OdbpyStep):
             bool,
             "Set true to generate a left-hand macro",
         ),
+        Variable(
+            "CHANNELS",
+            Optional[str],
+            "Route-through channels of the IHP CFGMEM placer: comma-separated bit "
+            "indices before which a decap channel is placed in every array row, "
+            "obstructed on CHANNEL_LAYERS for the macro's own routing.",
+            default=None,
+        ),
+        Variable(
+            "CHANNEL_SITES",
+            int,
+            "Width of each route-through channel in sites.",
+            default=8,
+        ),
+        Variable(
+            "CHANNEL_LAYERS",
+            str,
+            "Layers obstructed over the route-through channels.",
+            default="Metal2,Metal4",
+        ),
     ]
 
     def get_script_path(self):
@@ -78,8 +98,33 @@ class PlaceRAM(Odb.OdbpyStep):
                 "--size",
                 self.config["RAM_SIZE"],
             ]
+        if self.config["CHANNELS"]:
+            raw += [
+                "--channels",
+                self.config["CHANNELS"],
+                "--channel-sites",
+                str(self.config["CHANNEL_SITES"]),
+                "--channel-layers",
+                self.config["CHANNEL_LAYERS"],
+            ]
         raw.insert(raw.index("placeram"), "-m")
         print(f'RAW COMMAND: {raw}')
+        return raw
+
+
+class RemoveChannelObstructions(Odb.OdbpyStep):
+    """Drops the route-through channel obstructions the placer created,
+    once the macro's detailed routing is done (see placeram/rm_obstructions.py)."""
+
+    id = "DFFRAM.RemoveChannelObstructions"
+    name = "Remove Channel Obstructions"
+
+    def get_script_path(self):
+        return "placeram.rm_obstructions"
+
+    def get_command(self) -> List[str]:
+        raw = super().get_command()
+        raw.insert(raw.index("placeram.rm_obstructions"), "-m")
         return raw
 
 
@@ -492,6 +537,7 @@ class DFFRAM(SequentialFlow):
 
         OpenROAD.STAMidPNR,
         OpenROAD.DetailedRouting,
+        RemoveChannelObstructions,
         Odb.RemoveRoutingObstructions,
         OpenROAD.CheckAntennas,
         Checker.TrDRC,
@@ -606,6 +652,19 @@ class DFFRAM(SequentialFlow):
     help="Regex of pins whose bottom-edge shapes go on Metal4 instead of the "
     "vertical pin layer (routing then reaches Metal4 for pin access only)",
 )
+@cloup.option(
+    "--channels",
+    default=None,
+    help="Route-through channels (IHP CFGMEM placer): comma-separated bit "
+    "indices before which a decap channel is placed in every array row; the "
+    "channel's Metal2/Metal4 tracks are left to the parent design's router",
+)
+@cloup.option(
+    "--channel-sites",
+    default=8,
+    type=int,
+    help="Width of each route-through channel in sites",
+)
 @cloup_flow_opts(accept_config_files=False)
 @cloup.argument("size", default="32x32", nargs=1)
 def main(
@@ -626,6 +685,8 @@ def main(
     default_clock_period,
     min_height,
     pins_to_metal4,
+    channels,
+    channel_sites,
     build_dir,
     products_dir,
     flow_name,
@@ -748,6 +809,22 @@ def main(
             "GRT_LAYER_ADJUSTMENTS": [0, 0, 0, Decimal("0.9"), 0],
             "LEF_ROUTE_THROUGH_LAYERS": through,
         }
+
+    if channels:
+        variant_config["CHANNELS"] = channels
+        variant_config["CHANNEL_SITES"] = channel_sites
+    # LibreLane's own -c KEY=VALUE flow option (config_override_strings), e.g.
+    # -c PDN_VOFFSET=12.16 to put the macro's power rails on a parent design's
+    # stripe grid; numeric values become Decimals.
+    for override in kwargs.pop("config_override_strings", None) or []:
+        if "=" not in override:
+            err(f"-c expects KEY=VALUE, got '{override}'")
+            exit(os.EX_USAGE)
+        key, value = override.split("=", 1)
+        try:
+            variant_config[key] = Decimal(value)
+        except Exception:
+            variant_config[key] = value
 
     TargetFlow = Flow.factory.get(flow_name) or DFFRAM
     dffram_flow = TargetFlow(
