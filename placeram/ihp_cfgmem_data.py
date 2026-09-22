@@ -82,7 +82,9 @@ class ColumnGeometry:
         self.split = split  # bit index before which the mid gap is placed
         self.slack = slack  # empty sites left in every bit column
         # Route-through channels: bit index -> sites of decap placed before
-        # that bit column in every array row.  The parent design's router
+        # that bit column in every array row; the index equal to the number
+        # of bit columns means after the array (between the array's east
+        # end and the decoder column).  The parent design's router
         # gets the vertical tracks over them (the placer obstructs them for
         # the macro's own routing, see Placer.obstruct_channels), so a net
         # crossing the macro can hop between the Metal3 openings the
@@ -166,6 +168,10 @@ class IhpCfgSlice(Placeable):
             r.place(bit)
             skip(r, geo.pitch - sites(bit))
 
+        # The after-the-array channel comes straight after the last bit column
+        # in every row type, so it lines up with the bit rows; the select
+        # buffer (and the left macro's row AND) sit east of it.
+        place_channel(r, geo, len(self.bits))
         r.place(self.selbuf)
         if self.left:
             r.place(self.rowand)
@@ -311,6 +317,7 @@ class IhpCfgMem_16(Placeable):
                 r.place(c)
                 used += sites(c)
             skip(r, geo.pitch - used)
+        place_channel(r, geo, len(cells_per_bit), rects)
 
     def place(self, row_list: List[Row], start_row: int = 0):
         geo = self.geometry()

@@ -112,6 +112,31 @@ class PlaceRAM(Odb.OdbpyStep):
         return raw
 
 
+class PinsAvoidChannels(Odb.OdbpyStep):
+    """Slides bottom-edge pin shapes out of the placer's route-through
+    channels (scripts/odbpy/pins_avoid_channels.py); a no-op without them."""
+
+    id = "DFFRAM.PinsAvoidChannels"
+    name = "Pins Avoid Channels"
+    config_vars = [
+        Variable(
+            "CHANNEL_PIN_CLEARANCE",
+            Decimal,
+            "Spacing kept between a bottom-edge pin shape and a route-through channel or another pin.",
+            units="µm",
+            default=0.3,
+        ),
+    ]
+
+    def get_script_path(self):
+        return os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "scripts", "odbpy", "pins_avoid_channels.py"
+        )
+
+    def get_command(self) -> List[str]:
+        return super().get_command() + ["--clearance", str(self.config["CHANNEL_PIN_CLEARANCE"])]
+
+
 class RemoveChannelObstructions(Odb.OdbpyStep):
     """Drops the route-through channel obstructions the placer created,
     once the macro's detailed routing is done (see placeram/rm_obstructions.py)."""
@@ -524,6 +549,7 @@ class DFFRAM(SequentialFlow):
         PlaceRAM,
         OpenROAD.IOPlacement,
         Odb.CustomIOPlacement,
+        PinsAvoidChannels,
         OpenROAD.GeneratePDN,
         PinsToLayer,
         OpenROAD.STAMidPNR,

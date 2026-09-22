@@ -222,12 +222,12 @@ class Placer:
         if not rects or not self.channel_layers:
             return
         tech = self.db.getTech()
-        # Row 0 is the pin side (the S-edge Di0/Do0 pins are spread evenly
-        # along the face, so some land inside a channel): leave that row
-        # open so their escapes can turn onto Metal3, obstruct from row 1 up.
-        first = 1 if last_row > 1 else 0
-        y0 = self.rows[first].ymin
-        y1 = self.rows[last_row - 1].ymax
+        # The whole die height, pin rows included: DFFRAM.PinsAvoidChannels
+        # moves the bottom-edge pins out of the channel spans before the PDN
+        # and routing, so nothing needs the channel's Metal2 or Metal4.
+        die = self.block.getDieArea()
+        y0 = die.yMin()
+        y1 = die.yMax()
         for layer_name in self.channel_layers:
             layer = tech.findLayer(layer_name)
             if layer is None:

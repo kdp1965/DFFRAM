@@ -64,6 +64,12 @@ def main(reader, pins, layer, from_layer, clearance):
             for box in bpin.getBoxes():
                 if box.getTechLayer().getName() == layer:
                     blocked.append((box.xMin() - clr, box.xMax() + clr))
+    # the route-through channels (locked decap columns chan_0_*) are off
+    # limits too, or a stripe dodge could land a pin in one
+    for inst in block.getInsts():
+        if re.match(r"chan_0_\d+$", inst.getName()):
+            bbox = inst.getBBox()
+            blocked.append((bbox.xMin() - clr, bbox.xMax() + clr))
     stripes = len(blocked)
 
     grid = block.findTrackGrid(target)
