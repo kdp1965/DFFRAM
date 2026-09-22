@@ -53,6 +53,17 @@ cfgmem16_cmos5l_ch2:
 left_cmos5l_ch2:
 	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_PINS)' --channels '$(CHANNELS2)' 16x32"
 
+# Third iteration: the four channels of the first at half width (4 sites,
+# 1.92 um: they were lightly used at 8), with the second iteration's
+# full-height obstruction and pin avoidance.
+CHANNELS3 ?= 6,13,19,26
+CHANNEL_SITES3 ?= 4
+cfgmem16_cmos5l_ch3:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp --pins-to-metal4 '$(M4_PINS)' --channels '$(CHANNELS3)' --channel-sites $(CHANNEL_SITES3) 16x32"
+
+left_cmos5l_ch3:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_PINS)' --channels '$(CHANNELS3)' --channel-sites $(CHANNEL_SITES3) 16x32"
+
 # IHP SG13G2 (ihp-sg13g2 PDK, sg13g2_stdcell library). Same models and design
 # names as CMOS5L, so the outputs go to build/ihp-sg13g2 and products/ihp-sg13g2.
 # Tiny Tapeout 5x4 sg13g2 tile variant (../ihp-sg13g2-janestreet-prism): data
