@@ -20,6 +20,15 @@ layer) is shifted to the nearest free routing track.  Pin length and width
 are kept; the placement status is kept.  Meant for putting a macro's data
 pins on the parent's under-used top vertical layer (Metal4 on CMOS5L, which
 also carries the power stripes).
+
+The parent draws its stripes on the macro's rail grid and lets them run
+straight across the macro (the macro leaves that layer open), so a rail the
+macro's own PDN step dropped - one that fell into a route-through channel,
+where no via stack can reach Metal1 - still exists in the parent as a
+stripe.  Each power net's rails are therefore extrapolated at their pitch
+across the die and the missing positions are blocked as well (the tile
+short of 2026-09-23: Di0[1] placed 0.07 um into the parent's VGND stripe
+where the macro's rail at 16.01 um had been dropped for the first channel).
 """
 
 import re
@@ -53,12 +62,36 @@ def main(reader, pins, layer, from_layer, clearance):
 
     # x intervals already taken on the target layer, grown by the clearance
     blocked = []
+    rails = {}  # power net -> [(xmin, xmax)] of its vertical stripes
     for net in block.getNets():
         for swire in net.getSWires():
             for box in swire.getWires():
                 lyr = box.getTechLayer()
                 if lyr is not None and lyr.getName() == layer:
                     blocked.append((box.xMin() - clr, box.xMax() + clr))
+                    if box.yMax() - box.yMin() > box.xMax() - box.xMin():
+                        rails.setdefault(net.getName(), []).append((box.xMin(), box.xMax()))
+    # rails the PDN dropped (see the module docstring): extrapolate each net's
+    # rails at their pitch across the die and block those positions too
+    for name, boxes in sorted(rails.items()):
+        centers = sorted((lo + hi) // 2 for lo, hi in boxes)
+        if len(centers) < 2:
+            continue
+        pitch = min(b - a for a, b in zip(centers, centers[1:]))
+        half = max(hi - lo for lo, hi in boxes) // 2
+        lo_k = -((centers[0] - die.xMin()) // pitch)
+        hi_k = (die.xMax() - centers[0]) // pitch
+        for k in range(lo_k, hi_k + 1):
+            c = centers[0] + k * pitch
+            if c - half < die.xMin() or c + half > die.xMax():
+                continue
+            if any(abs(c - e) < pitch // 4 for e in centers):
+                continue
+            print(
+                f"{name}: no rail at {c / u:.2f} um (dropped by the PDN?); "
+                f"blocked as a parent stripe"
+            )
+            blocked.append((c - half - clr, c + half + clr))
     for bterm in block.getBTerms():
         for bpin in bterm.getBPins():
             for box in bpin.getBoxes():

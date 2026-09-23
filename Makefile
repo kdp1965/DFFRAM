@@ -104,6 +104,16 @@ cfgmem16_cmos5l_ch8:
 left_cmos5l_ch8:
 	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_ALL)' --channels '$(CHANNELS6L)' -c CHANNEL_LAYERS=Metal2 16x32"
 
+# No-channel A/B partner of the eighth arrangement (2026-09-23): the ch9
+# pin arrangement (every data pin on Metal4, the right macro's controls on
+# its side face) with no route-through channels at all, so the macro keeps
+# every power rail.  Tile runs against ch9 isolate what the channels add.
+cfgmem16_cmos5l_m4all:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp --pins-to-metal4 '$(M4_ALL)' 16x32"
+
+left_cmos5l_m4all:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_ALL)' 16x32"
+
 # IHP SG13G2 (ihp-sg13g2 PDK, sg13g2_stdcell library). Same models and design
 # names as CMOS5L, so the outputs go to build/ihp-sg13g2 and products/ihp-sg13g2.
 # Tiny Tapeout 5x4 sg13g2 tile variant (../ihp-sg13g2-janestreet-prism): data
