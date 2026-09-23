@@ -81,6 +81,18 @@ CHANNELS6L ?= 6:4,13:4,19:4,32:8
 left_cmos5l_ch6:
 	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_PINS)' --channels '$(CHANNELS6L)' 16x32"
 
+# Seventh arrangement: the inspected channels (ch5 right / ch6 left) with
+# every data pin on Metal4 (Di0 as well as Do0) and, on the right macro,
+# the EN0 / A0 / BYP control pins on the W side face beside WE0 / WROW,
+# as the left macro already has them.  Nothing of the macro's then reaches
+# the mouth on Metal2.
+M4_ALL ?= ^D[io]0\\[
+cfgmem16_cmos5l_ch7:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp --pins-to-metal4 '$(M4_ALL)' --channels '$(CHANNELS5)' 16x32"
+
+left_cmos5l_ch7:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_ALL)' --channels '$(CHANNELS6L)' 16x32"
+
 # IHP SG13G2 (ihp-sg13g2 PDK, sg13g2_stdcell library). Same models and design
 # names as CMOS5L, so the outputs go to build/ihp-sg13g2 and products/ihp-sg13g2.
 # Tiny Tapeout 5x4 sg13g2 tile variant (../ihp-sg13g2-janestreet-prism): data
