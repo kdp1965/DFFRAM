@@ -93,6 +93,17 @@ cfgmem16_cmos5l_ch7:
 left_cmos5l_ch7:
 	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_ALL)' --channels '$(CHANNELS6L)' 16x32"
 
+# Eighth arrangement: as the seventh, but the channel obstruction is Metal2
+# only.  With Metal4 obstructed too the channel's Metal4 ladder meets the
+# tile's stripe via pads at the macro top and bottom edges (three fixed
+# VGND shorts at the left column's first channel in every ch7 run); on
+# Metal2 alone the ladder is what the router actually used anyway.
+cfgmem16_cmos5l_ch8:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp --pins-to-metal4 '$(M4_ALL)' --channels '$(CHANNELS5)' -c CHANNEL_LAYERS=Metal2 16x32"
+
+left_cmos5l_ch8:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left --left --pins-to-metal4 '$(M4_ALL)' --channels '$(CHANNELS6L)' -c CHANNEL_LAYERS=Metal2 16x32"
+
 # IHP SG13G2 (ihp-sg13g2 PDK, sg13g2_stdcell library). Same models and design
 # names as CMOS5L, so the outputs go to build/ihp-sg13g2 and products/ihp-sg13g2.
 # Tiny Tapeout 5x4 sg13g2 tile variant (../ihp-sg13g2-janestreet-prism): data
