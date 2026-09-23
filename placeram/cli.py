@@ -288,7 +288,8 @@ def check_readable(file):
     "--channels",
     default="",
     help="Route-through channels: comma-separated bit indices before which a "
-    "decap channel is placed in every array row (IhpCfgMem_16 only)",
+    "decap channel is placed in every array row (IhpCfgMem_16 only); "
+    "bit:sites gives a channel its own width",
 )
 @click.option(
     "--channel-sites",
@@ -315,9 +316,14 @@ def cli(
     building_blocks,
     odb_in,
 ):
-    channel_dict = {
-        int(b): channel_sites for b in channels.split(",") if b.strip() != ""
-    }
+    # "6,13,19" = channels of --channel-sites each; "1:8,13:4" gives a
+    # channel its own width in sites
+    channel_dict = {}
+    for item in channels.split(","):
+        if item.strip() == "":
+            continue
+        bit, _, sites_ = item.partition(":")
+        channel_dict[int(bit)] = int(sites_) if sites_ else channel_sites
     channel_layer_list = [l for l in channel_layers.split(",") if l.strip() != ""]
     pdk, scl, blocks = building_blocks.split(":")
     platform_tech_file = os.path.join(".", "platforms", pdk, scl, "tech.yml")
