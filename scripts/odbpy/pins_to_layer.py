@@ -29,6 +29,12 @@ stripe.  Each power net's rails are therefore extrapolated at their pitch
 across the die and the missing positions are blocked as well (the tile
 short of 2026-09-23: Di0[1] placed 0.07 um into the parent's VGND stripe
 where the macro's rail at 16.01 um had been dropped for the first channel).
+
+A macro built for one spot in the parent (dffram.py --pdn-stripes, rails
+off any regular pitch) passes the parent's stripes explicitly instead
+(--parent-stripes X:WIDTH,...): those are blocked with their own clearance,
+at the parent's width (the SRAM column stripes are wider than the macro's
+rails), and nothing is extrapolated.
 """
 
 import re
@@ -49,8 +55,20 @@ from reader import click_odb
     type=float,
     help="Spacing (um) kept from stripes and other pins on the target layer",
 )
+@click.option(
+    "--parent-stripes",
+    default=None,
+    help="The parent's stripes across the macro, X:WIDTH,... (um, centre from "
+    "the macro origin); replaces the extrapolation of the macro's rails",
+)
+@click.option(
+    "--parent-clearance",
+    default=0.5,
+    type=float,
+    help="Spacing (um) kept from the parent's stripes",
+)
 @click_odb
-def main(reader, pins, layer, from_layer, clearance):
+def main(reader, pins, layer, from_layer, clearance, parent_stripes, parent_clearance):
     block = reader.block
     tech = reader.tech
     u = block.getDbUnitsPerMicron()
@@ -71,9 +89,17 @@ def main(reader, pins, layer, from_layer, clearance):
                     blocked.append((box.xMin() - clr, box.xMax() + clr))
                     if box.yMax() - box.yMin() > box.xMax() - box.xMin():
                         rails.setdefault(net.getName(), []).append((box.xMin(), box.xMax()))
+    # the parent's stripes, when given, at their own width and clearance
+    pclr = int(round(parent_clearance * u))
+    for item in (parent_stripes or "").split(","):
+        if not item.strip():
+            continue
+        x, w = (float(v) for v in item.split(":"))
+        c, half = int(round(x * u)), int(round(w * u)) // 2
+        blocked.append((c - half - pclr, c + half + pclr))
     # rails the PDN dropped (see the module docstring): extrapolate each net's
     # rails at their pitch across the die and block those positions too
-    for name, boxes in sorted(rails.items()):
+    for name, boxes in sorted(rails.items()) if not parent_stripes else []:
         centers = sorted((lo + hi) // 2 for lo, hi in boxes)
         if len(centers) < 2:
             continue

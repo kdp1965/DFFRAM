@@ -35,13 +35,20 @@ NL_SKY    := $(ROOT)/products/CFGMEM16/nl/CFGMEM16.nl.v $(ROOT)/products/CFGMEM_
 IHP_NAMES := -DCFGMEM_RIGHT=CFGMEM_IHP16 -DCFGMEM_LEFT=CFGMEM_IHP_LEFT16
 SKY_NAMES := -DCFGMEM_RIGHT=CFGMEM16 -DCFGMEM_LEFT=CFGMEM_LEFT16
 
+# CFGMEM_IHP_LEFT16_SRAM (models/cfgmem_ihp_left_sram): the left macro's
+# netlist under its own name, built with SRAM-aligned rails
+SRAM_NAMES   := -DCFGMEM_RIGHT=CFGMEM_IHP16 -DCFGMEM_LEFT=CFGMEM_IHP_LEFT16_SRAM
+SRAM_RTL     := $(IHP_BD) $(ROOT)/models/cfgmem_ihp/model.v $(ROOT)/models/cfgmem_ihp_left_sram/model.v
+NL_CMOS5L_SR := $(ROOT)/products/CFGMEM_IHP16/nl/CFGMEM_IHP16.nl.v $(ROOT)/products/CFGMEM_IHP_LEFT16_SRAM/nl/CFGMEM_IHP_LEFT16_SRAM.nl.v
+
 # Run the targets whose sources are present.
-AVAILABLE := rtl-ihp rtl-sky130 \
+AVAILABLE := rtl-ihp rtl-ihp-sram rtl-sky130 \
              $(if $(wildcard $(NL_CMOS5L)),nl-cmos5l,) \
+             $(if $(wildcard $(NL_CMOS5L_SR)),nl-cmos5l-sram,) \
              $(if $(wildcard $(NL_SG13G2)),nl-sg13g2,) \
              $(if $(wildcard $(NL_SKY)),nl-sky130,)
 
-.PHONY: all clean rtl-ihp nl-cmos5l nl-sg13g2 rtl-sky130 nl-sky130
+.PHONY: all clean rtl-ihp rtl-ihp-sram nl-cmos5l nl-cmos5l-sram nl-sg13g2 rtl-sky130 nl-sky130
 all: $(AVAILABLE)
 
 # $(1) = target name, $(2) = -D name defines, $(3) = design sources
@@ -65,6 +72,12 @@ models/sg13cmos5l_cells.v: models/sg13g2_cells.v
 
 nl-cmos5l: models/sg13cmos5l_cells.v
 	$(call run_sim,$@,$(IHP_NAMES),models/sg13cmos5l_cells.v $(NL_CMOS5L))
+
+rtl-ihp-sram:
+	$(call run_sim,$@,$(SRAM_NAMES) -I$(ROOT)/models/cfgmem_ihp_left_sram,models/sg13g2_cells.v $(SRAM_RTL))
+
+nl-cmos5l-sram: models/sg13cmos5l_cells.v
+	$(call run_sim,$@,$(SRAM_NAMES),models/sg13cmos5l_cells.v $(NL_CMOS5L_SR))
 
 rtl-sky130:
 	$(call run_sim,$@,$(SKY_NAMES),models/sky130_cells.v $(SKY_RTL))

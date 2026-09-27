@@ -25,9 +25,17 @@
 // platform's block_definitions.v: the IHP libraries have no a222oi/a21boi, so
 // each group of four words uses two a22oi_1 plus an and2_1 to form an
 // active-low "quad hit", and a nand4_1 merges the four quads.
+//
+// The module name is the macro CFGMEM_LEFT_TOP so a variant with its own
+// physical build (models/cfgmem_ihp_left_sram) can reuse this netlist under
+// another name.
 `default_nettype none
 
-module CFGMEM_IHP_LEFT16
+`ifndef CFGMEM_LEFT_TOP
+`define CFGMEM_LEFT_TOP CFGMEM_IHP_LEFT16
+`endif
+
+module `CFGMEM_LEFT_TOP
 #(
     parameter WSIZE = 32,
     parameter COUNT = 16
