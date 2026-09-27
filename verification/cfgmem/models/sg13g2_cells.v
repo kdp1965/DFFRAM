@@ -9,6 +9,11 @@ module sg13g2_dlhq_1 (input wire D, input wire GATE, output reg Q);
     always_latch if (GATE) Q = D;   // transparent while GATE is high
 endmodule
 
+// D latch with an asynchronous active-low clear (the LRAM storage).
+module sg13g2_dlhrq_1 (input wire D, input wire GATE, input wire RESET_B, output reg Q);
+    always_latch if (!RESET_B) Q = 1'b0; else if (GATE) Q = D;
+endmodule
+
 module sg13g2_a22oi_1 (input wire A1, input wire A2, input wire B1, input wire B2, output wire Y);
     assign Y = ~((A1 & A2) | (B1 & B2));
 endmodule
@@ -20,6 +25,7 @@ module sg13g2_and4_1 (input wire A, input wire B, input wire C, input wire D, ou
 module sg13g2_nand4_1 (input wire A, input wire B, input wire C, input wire D, output wire Y);  assign Y = ~(A & B & C & D); endmodule
 module sg13g2_nor2b_1 (input wire A, input wire B_N, output wire Y);  assign Y = ~(A | ~B_N); endmodule
 module sg13g2_inv_1 (input wire A, output wire Y);  assign Y = ~A; endmodule
+module sg13g2_inv_4 (input wire A, output wire Y);  assign Y = ~A; endmodule
 module sg13g2_buf_2 (input wire A, output wire X);  assign X = A; endmodule
 module sg13g2_buf_4 (input wire A, output wire X);  assign X = A; endmodule
 module sg13g2_buf_16 (input wire A, output wire X);  assign X = A; endmodule

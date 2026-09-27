@@ -1,0 +1,12 @@
+widths: [8]
+counts: [16]
+design_name_template: "LRAM_IHP_LEFT{count}x{width}"
+# placeram hierarchy class used to place this model (see placeram/ihp_lram_data.py);
+# build with --left so the placer mirrors the rows towards the W-edge pins
+placer: IhpLatchRam
+variants:
+  - null
+# as models/lram_ihp/config.yml
+flow_config:
+  HEURISTIC_ANTENNA_THRESHOLD: 1000
+  HALO_ROUND_TO_SITE: false

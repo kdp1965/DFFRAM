@@ -151,3 +151,19 @@ DFFRF:
   rfw0_obufs2: \bRFW0\.BIT\\\[(\d+)\\\]\.OBUF2\b
   rfw0_selinv2: \bRFW0\.BIT\\\[(\d+)\\\]\.SEL2_BINV\b
   tiezero: \bTIE_ZERO_zero_\b
+# 16x8 latch RAM (models/lram_ihp, placeram/ihp_lram_data.py)
+IhpLatchRam:
+  store: \bWORD\\\[(\d+)\\\]\.BIT\\\[(\d+)\\\]\.STORAGE
+  cg: \bWORD\\\[(\d+)\\\]\.CG\b
+  wsel: \bWORD\\\[(\d+)\\\]\.WSEL\b
+  rsel: \bWORD\\\[(\d+)\\\]\.RSEL\b
+  pair: \bROW\\\[(\d+)\\\]\.PAIR\\\[(\d+)\\\]\.SEL\b
+  quad: \bROW\\\[(\d+)\\\]\.QUAD\\\[(\d+)\\\]\.QAND\b
+  onand: \bROW\\\[(\d+)\\\]\.ONAND\b
+  dobuf: \bROW\\\[(\d+)\\\]\.DOBUF\b
+  dibuf: \bROW\\\[(\d+)\\\]\.DIBUF\b
+  rstbuf: \bROW\\\[(\d+)\\\]\.RSTBUF\b
+  clkinv: \bCLKINV\b
+  rstroot: \bRSTROOT\b
+  wdec: \bWDEC\.(\w+)
+  rdec: \bRDEC\.(\w+)

@@ -179,3 +179,26 @@ module CFG_WORD (
         end
     endgenerate
 endmodule
+
+// Blocks of the lram_ihp model (LRAM_IHP16x8, placeram/ihp_lram_data.py).
+module INV_1 (input A, output Y);
+    sg13cmos5l_inv_1 __cell__ ( .A(A), .Y(Y) );
+endmodule
+
+module INV_4 (input A, output Y);
+    sg13cmos5l_inv_4 __cell__ ( .A(A), .Y(Y) );
+endmodule
+
+module AND3_1 (input A, input B, input C, output X);
+    sg13cmos5l_and3_1 __cell__ ( .A(A), .B(B), .C(C), .X(X) );
+endmodule
+
+// Integrated clock gate: GCLK = CLK & GATE, GATE latched while CLK is low.
+module LGCP_1 (input CLK, input GATE, output GCLK);
+    sg13cmos5l_lgcp_1 __cell__ ( .CLK(CLK), .GATE(GATE), .GCLK(GCLK) );
+endmodule
+
+// D latch, transparent while GATE is high, asynchronous active-low reset.
+module DLHRQ_1 (input D, input GATE, input RESET_B, output Q);
+    sg13cmos5l_dlhrq_1 __cell__ ( .D(D), .GATE(GATE), .RESET_B(RESET_B), .Q(Q) );
+endmodule

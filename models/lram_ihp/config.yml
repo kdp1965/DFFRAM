@@ -1,0 +1,16 @@
+widths: [8]
+counts: [16]
+design_name_template: "LRAM_IHP{count}x{width}"
+# placeram hierarchy class used to place this model (see placeram/ihp_lram_data.py)
+placer: IhpLatchRam
+variants:
+  - null
+# Every row net (data in, reset, the predecoded selects) is longer than the
+# heuristic diode threshold, yet the antenna check finds nothing: the rows
+# have no room for a diode per sink (234 of them, 2026-09-24), so leave the
+# heuristic out and let the antenna repair act on real violations.
+flow_config:
+  HEURISTIC_ANTENNA_THRESHOLD: 1000
+  # Ten rows: rounding the 1 um halos up to a row each would add 17 % to
+  # the height for nothing (the pins are on the E edge).
+  HALO_ROUND_TO_SITE: false

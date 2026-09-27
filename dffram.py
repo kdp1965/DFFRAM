@@ -186,6 +186,16 @@ class Floorplan(OpenROAD.Floorplan):
             default=0,
             units="µm",
         ),
+        Variable(
+            "HALO_ROUND_TO_SITE",
+            bool,
+            "Round every halo up to a whole site width / row height.  Off, "
+            "only the left and bottom halos are rounded (OpenROAD snaps the "
+            "core's lower-left corner to the site grid, IFP-0028) and the "
+            "right and top halos are used as given: a ten-row macro would "
+            "otherwise lose a row's height at each end to the rounding.",
+            default=True,
+        ),
     ]
 
     def run(self, state_in, **kwargs):
@@ -215,20 +225,28 @@ class Floorplan(OpenROAD.Floorplan):
             site_width = Decimal(site_info["width"])
             site_height = Decimal(site_info["height"])
 
+            right_halo = horizontal_halo
+            top_halo = vertical_halo
             horizontal_halo = math.ceil(horizontal_halo / site_width) * site_width
             vertical_halo = math.ceil(vertical_halo / site_height) * site_height
+            if self.config["HALO_ROUND_TO_SITE"]:
+                right_halo = horizontal_halo
+                top_halo = vertical_halo
         else:
+            right_halo = horizontal_halo
+            top_halo = vertical_halo
             if horizontal_halo != 0.0 or vertical_halo != 0.0:
                 warn(
                     "Note: This platform does not have site information. The halo will not be rounded up to the nearest number of sites. This may cause off-by-one issues with some tools."
                 )
 
-        die_width = core_width + horizontal_halo * 2
-        die_height = core_height + vertical_halo * 2
+        die_width = core_width + horizontal_halo + right_halo
+        die_height = core_height + vertical_halo + top_halo
         if die_height < min_height:
             die_height = min_height
             vertical_halo = (die_height - core_height) / 2
             vertical_halo = math.ceil(vertical_halo / site_height) * site_height
+            top_halo = die_height - core_height - vertical_halo
 
         kwargs, env = self.extract_env(kwargs)
 
@@ -940,6 +958,11 @@ def main(
             if value.startswith("/") and not os.path.exists(value):
                 warn(f"{key}: '{value}' not found, using the PDK default.")
                 continue
+        platform_flow_config[key] = value
+
+    # A model may carry its own LibreLane settings too (models/*/config.yml
+    # `flow_config`), applied over the platform's.
+    for key, value in (platform_config.get("flow_config") or {}).items():
         platform_flow_config[key] = value
 
     # Data pins on Metal4 (experiment): the router may use Metal4, but only

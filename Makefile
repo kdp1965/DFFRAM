@@ -136,6 +136,28 @@ SRAM_STRIPES ?= VPWR:11.435:2.81,VGND:17.055:2.81,VPWR:33.915:2.81,VGND:39.535:2
 left_cmos5l_sram:
 	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b cfgmem_ihp_left_sram --left --pins-to-metal4 '$(M4_ALL)' --channels '$(CHANNELS_SRAM)' -c CHANNEL_LAYERS=Metal2 --pdn-stripes '$(SRAM_STRIPES)' 16x32"
 
+# 16x8 latch RAM for the PRISM shard FIFOs (one clocked write port, one
+# asynchronous read port): eight bit rows with the sixteen words across,
+# clock-gated latch writes as in DFFRAM's latch byte, AND-OR read-out.
+# See models/lram_ihp/model.v and placeram/ihp_lram_data.py.
+# Every signal pin on the S edge, spread evenly across the width by the IO
+# placer (about 6 um apart), then moved to Metal4 off the power rails
+# (DFFRAM.PinsToLayer): the tile reaches them on its lightly used vertical
+# layer instead of 27 Metal3 pins bunched into 22 um of one side edge.
+# Place with N (pins down) or FS (pins up); both keep the rails on the grid.
+LRAM_M4_PINS ?= ^(CLK|RST_N|WE|WA|RA|Di|Do)
+lram16x8_cmos5l:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b lram_ihp --pins-to-metal4 '$(LRAM_M4_PINS)' 16x8"
+
+# West-pin variant (LRAM_IHP_LEFT16x8): same netlist, rows mirrored, every
+# pin on the W edge; the rails keep the east macro's offsets, so both take
+# the same x = -2.41 + 44.96k positions in the tile.
+lram16x8_left_cmos5l:
+	$(NIX_RUN) "python3 dffram.py --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell -b lram_ihp_left --left 16x8"
+
+test-lram:
+	$(NIX_RUN) "make -C verification/lram all"
+
 # IHP SG13G2 (ihp-sg13g2 PDK, sg13g2_stdcell library). Same models and design
 # names as CMOS5L, so the outputs go to build/ihp-sg13g2 and products/ihp-sg13g2.
 # Tiny Tapeout 5x4 sg13g2 tile variant (../ihp-sg13g2-janestreet-prism): data

@@ -31,6 +31,8 @@ sta:
   clock_periods:
     cfgmem_ihp: {}
     cfgmem_ihp_left: {}
+    # the PRISM tile clock (64 MHz)
+    lram_ihp: {"*": 15.6}
     ram: {}
     rf: {}
 fills:

@@ -987,6 +987,10 @@ def create_hierarchy(instances, word_count, left, placer=None, channels=None):
         from .ihp_cfgmem_data import IhpCfgMem_16
 
         hierarchy = IhpCfgMem_16(instances, left, channels)
+    elif placer == "IhpLatchRam":
+        from .ihp_lram_data import IhpLatchRam
+
+        hierarchy = IhpLatchRam(instances, left)
     elif placer is not None:
         raise DataError("Unknown placer '%s' requested by model config." % placer)
     elif word_count == 1:
