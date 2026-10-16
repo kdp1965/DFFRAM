@@ -1,0 +1,21 @@
+# 32x32 RAM with an AND-OR read path (nand2 per bit, nand4 per slice, or4
+# per 16-word block) instead of the tri-state bus of models/ram, placed by
+# placeram/ao_data.py.  The macro keeps the name and the ports of RAM32, so
+# it drops into a design built around models/ram's; build it with its own
+# directories: python3 dffram.py -b ram_ao --build-dir build_ao --products-dir products_ao 32x32
+widths: [8, 16, 24, 32, 40, 48, 56, 64]
+counts: [32]
+design_name_template: "RAM{count}"
+placer: RamAO
+variants:
+  - null
+flow_config:
+  # The building blocks carry their own antenna diodes; the heuristic one
+  # per long-net pin (3424 on RAM32) has no room once the placer packs the
+  # rows.  OpenROAD.RepairAntennas after global routing handles the rest.
+  RUN_HEURISTIC_DIODE_INSERTION: false
+  # repair_antennas legalizes its diodes on the spot and cannot move the
+  # taps at the row starts (DPL-0036); jumpers fix most violations here
+  # (10 -> 3 nets on RAM32) and the model's own diodes do the rest.
+  GRT_ANTENNA_REPAIR_JUMPER_ONLY: true
+  DRT_ANTENNA_REPAIR_JUMPER_ONLY: true
