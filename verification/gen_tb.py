@@ -68,7 +68,8 @@ if __name__ == "__main__":
     PATTERN = sys.argv[1]
     word_num = int(re.search(r"RAM(\d+)x", PATTERN).group(1))
     addr_width = int(math.log2(word_num))
-    model_filename = os.path.realpath("../models/ram/model.v")
+    # MODEL=../models/ram_ao/model.v tests another building-block set with the same ports
+    model_filename = os.path.realpath(os.getenv("MODEL") or "../models/ram/model.v")
     if "1RW1R" in PATTERN:
         word_size = int(re.search(r"x(\d+)_", PATTERN).group(1))
         filename = f"tb_RAM{word_num}x{word_size}_1RW1R.v"
@@ -80,6 +81,9 @@ if __name__ == "__main__":
         module = f"RAM{word_num}"
         tb = single_ported_test(word_num, word_size, addr_width, model_filename)
 
+    if os.getenv("GATE"):
+        # a placed-and-routed netlist (products/<design>/nl/<design>.nl.v) has no parameters
+        tb = re.sub(r"(RAM\d+(?:_1RW1R)?)\s*#\((?:[^()]|\([^()]*\))*\)\s*SRAM", r"\1 SRAM", tb)
     with open(filename, "w+") as f:
         f.write(tb)
     print(module)

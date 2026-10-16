@@ -91,7 +91,7 @@ module DEC5x32 (
     wire hi;
     sky130_fd_sc_hd__conb_1 TIE  (.LO(), .HI(hi));
 
-	DEC3x4 D ( .A(A[4:3]), .SEL(EN), .EN(hi) );
+	DEC2x4 D ( .A(A[4:3]), .SEL(EN), .EN(hi) );
 endmodule
 
 module MUX4x1 #(parameter   WIDTH=32)
@@ -334,6 +334,67 @@ module WORD #( parameter    USE_LATCH=0,
     endgenerate
     
 endmodule 
+
+// AND-OR read path (models/ram_ao): a word's bits leave as ~(Q & SEL0) from
+// a nand2 each instead of driving a tri-state bus through an ebufn, and the
+// slice combines the eight words' terms in nand4s (RAM8_AO), the 16-word
+// block the two slices' in an or4 (RAM16_AO).  nand2_1 is 3 sites against
+// ebufn_2's 9, and the byte's select inverter becomes a buffer.  2026-10-16.
+module BYTE_AO #(  parameter   USE_LATCH=1)(
+    input   wire        CLK,    // FO: 1
+    input   wire        WE0,    // FO: 1
+    input   wire        SEL0,   // FO: 2
+    input   wire [7:0]  Di0,    // FO: 1
+    output  wire [7:0]  Qn0     // ~(Q & SEL0): the byte's terms of the read NAND tree
+);
+    wire [7:0]  Q_WIRE;
+    wire        WE0_WIRE;
+    wire        SEL0_buf;
+    wire        GCLK;
+    wire        CLK_B;
+    generate
+        genvar i;
+`ifndef NO_DIODES
+        (* keep = "true" *)
+        sky130_fd_sc_hd__diode_2 DIODE_CLK (.DIODE(CLK));
+`endif
+        if(USE_LATCH == 1) begin
+            sky130_fd_sc_hd__inv_1 CLKINV(.Y(CLK_B), .A(CLK));
+            sky130_fd_sc_hd__dlclkp_1 CG( .CLK(CLK_B), .GCLK(GCLK), .GATE(WE0_WIRE) );
+        end else begin
+            sky130_fd_sc_hd__dlclkp_1 CG( .CLK(CLK), .GCLK(GCLK), .GATE(WE0_WIRE) );
+        end
+        sky130_fd_sc_hd__buf_2 SEL0BUF(.X(SEL0_buf), .A(SEL0));       // 8 nand2 inputs
+        sky130_fd_sc_hd__and2_1 CGAND( .A(SEL0), .B(WE0), .X(WE0_WIRE) );
+        for(i=0; i<8; i=i+1) begin : BIT
+            if(USE_LATCH == 0)
+                sky130_fd_sc_hd__dfxtp_1 STORAGE ( .D(Di0[i]), .Q(Q_WIRE[i]), .CLK(GCLK) );
+            else
+                sky130_fd_sc_hd__dlxtp_1 STORAGE (.Q(Q_WIRE[i]), .D(Di0[i]), .GATE(GCLK) );
+            sky130_fd_sc_hd__nand2_1 OGATE ( .A(Q_WIRE[i]), .B(SEL0_buf), .Y(Qn0[i]) );
+        end
+    endgenerate
+endmodule
+
+module WORD_AO #( parameter    USE_LATCH=0,
+                               WSIZE=1 ) (
+    input   wire                 CLK,    // FO: 1
+    input   wire [WSIZE-1:0]     WE0,    // FO: 1
+    input   wire                 SEL0,   // FO: 1
+    input   wire [(WSIZE*8-1):0] Di0,    // FO: 1
+    output  wire [(WSIZE*8-1):0] Qn0
+);
+    wire CLK_buf;
+    wire SEL0_buf;
+    sky130_fd_sc_hd__clkbuf_4 CLKBUF (.X(CLK_buf), .A(CLK));
+    sky130_fd_sc_hd__clkbuf_2 SEL0BUF (.X(SEL0_buf), .A(SEL0));
+    generate
+        genvar i;
+            for(i=0; i<WSIZE; i=i+1) begin : BYTE
+                BYTE_AO #(.USE_LATCH(USE_LATCH)) B ( .CLK(CLK_buf), .WE0(WE0[i]), .SEL0(SEL0_buf), .Di0(Di0[(i+1)*8-1:i*8]), .Qn0(Qn0[(i+1)*8-1:i*8]) );
+            end
+    endgenerate
+endmodule
 
 module WORD_1RW1R #( parameter  USE_LATCH=1,
                                 WSIZE=1 ) (

@@ -167,3 +167,48 @@ IhpLatchRam:
   rstroot: \bRSTROOT\b
   wdec: \bWDEC\.(\w+)
   rdec: \bRDEC\.(\w+)
+# AND-OR read path (models/ram_ao, placeram/ao_data.py)
+BitAO:
+  store: \bSTORAGE\b
+  ogate: \bOGATE\b
+ByteAO:
+  bits: \bBIT\\\[(\d+)\\\]
+  clockgate: \bCG\b
+  cgand: \bCGAND\b
+  clkinv: \bCLKINV\b
+  clkdiode: \bDIODE_CLK\b
+  selbuf: \bSEL(\d+)BUF\b
+WordAO:
+  clkbuf: \bCLKBUF\b
+  selbufs: \bSEL(\d+)BUF\b
+  bytes: \bBYTE\\\[(\d+)\\\]
+SliceAO:
+  clkbuf: \bCLKBUF\b
+  webufs: \bWEBUF\\\[(\d+)\\\].__cell__
+  words: \bWORD\\\[(\d+)\\\]
+  decoders: \bDEC(\d+)\b
+  nands: \bBIT\\\[(\d+)\\\]\.HALF\\\[(\d+)\\\]\.N4\b
+  tiezero: \bTIE_ZERO_zero_\b
+Slice16AO:
+  slices: \bSLICE\\\[(\d+)\\\]
+  clk_diode: \bDIODE_CLK\b
+  clkbuf: \bCLKBUF\b
+  decoder_ands: \bDEC(\d+)\.AND(\d+)\b
+  doregs: \bDo(\d+)_REG\b
+  ors: \bBIT\\\[(\d+)\\\]\.OR4\b
+  webufs: \bWEBUF\\\[(\d+)\\\].__cell__
+  a_diodes: \bDIODE_A(\d+)\\\[(\d+)\\\]
+  abufs: \bA(\d+)BUF\\\[(\d+)\\\].__cell__
+  enbufs: \bEN(\d+)BUF.__cell__
+  decoder_invs: \bDEC(\d+)\.INV(\d+)\b
+BlockAO:
+  slice_16: \bSLICE_16\\\[(\d+)\\\]
+  decoder_ands: \bDEC(\d+)\.AND(\d+)\b
+  dibufs: \bDIBUF\\\[(\d+)\\\].__cell__
+  doregs: \bDo(\d+)_REG\b
+  webufs: \bWEBUF\\\[(\d+)\\\].__cell__
+  abufs: \bA(\d+)BUF\\\[(\d+)\\\].__cell__
+  enbufs: \bEN(\d+)BUF.__cell__
+  tiezero: \bTIE_ZERO_zero_\b
+  decoder_invs: \bDEC(\d+)\.INV(\d+)\b
+  domuxes: \bDo(\d+)MUX\b

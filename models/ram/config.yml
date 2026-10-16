@@ -4,3 +4,13 @@ design_name_template: "RAM{count}{variant}"
 variants:
   - null
   # - "1RW1R"
+flow_config:
+  # The building blocks carry their own antenna diodes; the heuristic one
+  # per long-net pin (3424 on RAM32) has no room once the placer packs the
+  # rows.  OpenROAD.RepairAntennas after global routing handles the rest.
+  RUN_HEURISTIC_DIODE_INSERTION: false
+  # repair_antennas legalizes its diodes on the spot and cannot move the
+  # taps at the row starts (DPL-0036); jumpers fix most violations here
+  # (10 -> 3 nets on RAM32) and the model's own diodes do the rest.
+  GRT_ANTENNA_REPAIR_JUMPER_ONLY: true
+  DRT_ANTENNA_REPAIR_JUMPER_ONLY: true

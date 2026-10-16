@@ -77,6 +77,31 @@ class PlaceRAM(Odb.OdbpyStep):
             "Layers obstructed over the route-through channels.",
             default="Metal2,Metal4",
         ),
+        Variable(
+            "BLOCK_GAP_ROWS",
+            int,
+            "Rows of decap the placer leaves after every 16-word block: "
+            "horizontal routing room (met1/met3) for the select, enable and "
+            "clock nets crossing the macro.  The stock placer's side-column "
+            "overflow used to leave 4; with 0 RAM32's global route needs 110% "
+            "of its met1 and the select path loses 2 ns.",
+            default=0,
+        ),
+        Variable(
+            "TOP_SPARE_ROWS",
+            int,
+            "Rows of decap the placer leaves above the output muxes.",
+            default=0,
+        ),
+        Variable(
+            "ROW_END_MARGIN",
+            int,
+            "Free sites the placer leaves at the end of every row, for the "
+            "legalizer's later insertions (the antenna repair's diodes: with "
+            "every site taken it failed, DPL-0036).  The fill step fills them.",
+            default=12,
+            units="sites",
+        ),
     ]
 
     def get_script_path(self):
@@ -107,6 +132,11 @@ class PlaceRAM(Odb.OdbpyStep):
                 "--channel-layers",
                 self.config["CHANNEL_LAYERS"],
             ]
+        raw += [
+            "--row-margin", str(self.config["ROW_END_MARGIN"]),
+            "--gap-rows", str(self.config["BLOCK_GAP_ROWS"]),
+            "--top-rows", str(self.config["TOP_SPARE_ROWS"]),
+        ]
         raw.insert(raw.index("placeram"), "-m")
         print(f'RAW COMMAND: {raw}')
         return raw
@@ -637,9 +667,23 @@ class DFFRAM(SequentialFlow):
 
     # Same RUN_* switches as LibreLane's Classic flow, so a platform can
     # disable signoff tools it does not support via tech.yml `flow_config`.
-    config_vars = [var for var in Classic.config_vars if var.name in GATED_RUN_VARS]
+    config_vars = [var for var in Classic.config_vars if var.name in GATED_RUN_VARS] + [
+        Variable(
+            "RUN_HEURISTIC_DIODE_INSERTION",
+            bool,
+            "Odb.HeuristicDiodeInsertion: a diode on every pin of every net "
+            "longer than HEURISTIC_ANTENNA_THRESHOLD before routing.  A RAM's "
+            "address, select, clock and data nets are all long and its "
+            "building blocks carry their own diodes, so for RAM32 this meant "
+            "3424 diodes that no row had room for (DPL-0036 once the placer "
+            "stopped leaving rows of decap); models/ram and models/ram_ao turn "
+            "it off in their flow_config and rely on OpenROAD.RepairAntennas.",
+            default=True,
+        ),
+    ]
 
     gating_config_vars = {
+        "Odb.HeuristicDiodeInsertion": ["RUN_HEURISTIC_DIODE_INSERTION"],
         "Magic.StreamOut": ["RUN_MAGIC_STREAMOUT"],
         "KLayout.StreamOut": ["RUN_KLAYOUT_STREAMOUT"],
         "Magic.WriteLEF": ["RUN_MAGIC_WRITE_LEF"],

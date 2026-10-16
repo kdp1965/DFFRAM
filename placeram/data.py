@@ -622,13 +622,23 @@ class LRPlaceable(Placeable):
         for column in vertical_right:
             current_row = start_row
 
-            ## Attempt to spread them out across rows.
-            ## TODO: Look into spreading out the left ones as well?
-            rows_per_element = max(1, math.floor(row_count / len(column)))
-            for el in column:
-                r = row_list[current_row]
-                r.place(el)
-                current_row += rows_per_element
+            if len(column) > row_count > 0:
+                ## Longer than the rows it stands beside (a RAM32's 16-word
+                ## block has ~22 buffers and diodes for 18 rows): wrap it
+                ## into side-by-side columns instead of running past the
+                ## block, which left 4 rows of decap between the blocks and
+                ## 4 more on top (2026-10-16).
+                for j, el in enumerate(column):
+                    row_list[start_row + (j % row_count)].place(el)
+                current_row = start_row + row_count
+            else:
+                ## Attempt to spread them out across rows.
+                ## TODO: Look into spreading out the left ones as well?
+                rows_per_element = max(1, math.floor(row_count / len(column)))
+                for el in column:
+                    r = row_list[current_row]
+                    r.place(el)
+                    current_row += rows_per_element
 
         final_rows.append(current_row)
 
@@ -639,6 +649,13 @@ class LRPlaceable(Placeable):
 
 
 class Slice_16(LRPlaceable):  # A Slice_16 is defined as 2 RAM8 slices (16 words)
+    # Rows of decap left after the block's output register: horizontal
+    # routing room (met1/met3) for the select, enable and clock nets that
+    # cross the macro.  With none, RAM32's global route needed 110% of its
+    # met1 and the select path lost 2 ns (2026-10-16); the old overflow of
+    # the side column had been providing 4.
+    GAP_ROWS = 0
+
     def __init__(self, instances: List[Instance]):
         raw_slices: Dict[int, List[Instance]] = {}
         raw_doregs: Dict[int, List[Instance]] = {}
@@ -712,7 +729,7 @@ class Slice_16(LRPlaceable):  # A Slice_16 is defined as 2 RAM8 slices (16 words
                 doreg = self.doregs[port]
                 doreg.place(row_list, current_row)
 
-            current_row += 1
+            current_row += 1 + self.GAP_ROWS
             return current_row
 
         return self.lrplace(
@@ -736,6 +753,11 @@ class Slice_16(LRPlaceable):  # A Slice_16 is defined as 2 RAM8 slices (16 words
 
 
 class Block(LRPlaceable):  # A block is defined as 4 slices (32 words)
+    Slice16Class = Slice_16
+    # Empty rows left above the output muxes (were 2: a RAM32 carried two
+    # rows of decap under its top edge for nothing).
+    TOP_SPARE_ROWS = 0
+
     def __init__(self, instances: List[Instance]):
         raw_blocks: Dict[int, List[Instance]] = {}
         raw_domuxes: Dict[int, List[Instance]] = {}
@@ -747,6 +769,14 @@ class Block(LRPlaceable):  # A block is defined as 4 slices (32 words)
         def process_raw_domuxes(instance, domux):
             raw_domuxes[domux] = raw_domuxes.get(domux) or []
             raw_domuxes[domux].append(instance)
+
+        raw_dibufs: Dict[int, Instance] = {}
+
+        def process_dibuf(instance, bit):
+            # numeric order: the sieve's lists sort the groups as strings
+            # (0, 1, 10, 11, ...), which put the input buffers under the wrong
+            # bit columns (DIBUF nets ran 87 um sideways on average)
+            raw_dibufs[int(bit)] = instance
 
         self.sieve(
             instances,
@@ -761,7 +791,7 @@ class Block(LRPlaceable):  # A block is defined as 4 slices (32 words)
                 S(variable="abufs", groups=["port", "address_bit"]),
                 S(variable="decoder_ands", groups=["port", "bit"]),
                 S(variable="decoder_invs", groups=["port", "bit"]),
-                S(variable="dibufs", groups=["bit"]),
+                S(variable="dibufs", groups=["bit"], custom_behavior=process_dibuf),
                 S(
                     variable="domuxes",
                     groups=["domux"],
@@ -774,8 +804,9 @@ class Block(LRPlaceable):  # A block is defined as 4 slices (32 words)
         )
 
         self.dicts_to_lists()
+        self.dibufs = [raw_dibufs[b] for b in sorted(raw_dibufs)]
 
-        self.blocks = d2a({k: Slice_16(v) for k, v in raw_blocks.items()})
+        self.blocks = d2a({k: self.Slice16Class(v) for k, v in raw_blocks.items()})
         self.domuxes = d2a({k: Mux(v) for k, v in raw_domuxes.items()})
 
     def place(self, row_list: List[Row], start_row: int = 0):
@@ -826,15 +857,12 @@ class Block(LRPlaceable):  # A block is defined as 4 slices (32 words)
 
             for dibuf in self.dibufs:
                 r.place(dibuf)
+            if self.tiezero is not None:
+                r.place(self.tiezero)  # with the input buffers, not a row of its own
 
             current_row += 1
             for block in self.blocks:
                 current_row = block.place(row_list, current_row)
-
-            if self.tiezero is not None:
-                r = row_list[current_row]
-                r.place(self.tiezero)
-                current_row += 1
 
 #            print(f'current_row: {current_row}')
 #            print(f'row_list:    {len(row_list)}')
@@ -843,10 +871,7 @@ class Block(LRPlaceable):  # A block is defined as 4 slices (32 words)
             for domux in self.domuxes:
                 current_row = domux.place(row_list, current_row)
 
-#            for i in range(current_row+2):
-#               print(f'Row {i} X={row_list[i].x}')
-
-            return current_row+2
+            return current_row + self.TOP_SPARE_ROWS
 
         return self.lrplace(
             row_list=row_list,
@@ -991,6 +1016,12 @@ def create_hierarchy(instances, word_count, left, placer=None, channels=None):
         from .ihp_lram_data import IhpLatchRam
 
         hierarchy = IhpLatchRam(instances, left)
+    elif placer == "RamAO":
+        from .ao_data import BlockAO
+
+        if word_count != 32:
+            raise DataError("The RamAO placer handles 32 words only (got %i)." % word_count)
+        hierarchy = BlockAO(instances)
     elif placer is not None:
         raise DataError("Unknown placer '%s' requested by model config." % placer)
     elif word_count == 1:

@@ -65,9 +65,11 @@ class Placer:
         placer=None,
         channels=None,
         channel_layers=None,
+        row_margin=0,
     ):
         self.channels = channels or {}
         self.channel_layers = channel_layers or []
+        self.row_margin = row_margin
         # Initialize Database
         self.db = odb.dbDatabase.create()
 
@@ -171,6 +173,13 @@ class Placer:
         width_units = 0
         for row in self.rows:
             width_units = max(row.width, width_units)
+
+        # Free sites at the end of every row (the rows are only padded to the
+        # widest one): the legalizer after antenna repair has to fit its
+        # diodes somewhere, and with every site taken it failed on the taps
+        # at the row ends (DPL-0036) once the placer stopped leaving rows of
+        # decap.  OpenROAD.FillInsertion fills them at the end.
+        width_units += self.row_margin * Row.sw
 
         self.core_width = width_units / self.micron_in_units
 
@@ -302,6 +311,24 @@ def check_readable(file):
     default="Metal2,Metal4",
     help="Layers obstructed over the channels for the macro's own routing",
 )
+@click.option(
+    "--gap-rows",
+    default=0,
+    type=int,
+    help="Rows of decap left after every 16-word block (routing room for the nets crossing the macro)",
+)
+@click.option(
+    "--top-rows",
+    default=0,
+    type=int,
+    help="Rows of decap left above the output muxes",
+)
+@click.option(
+    "--row-margin",
+    default=0,
+    type=int,
+    help="Free sites left at the end of every row for the legalizer's later insertions (antenna diodes)",
+)
 @click.argument("odb_in", required=True, nargs=1)
 def cli(
     output_odb,
@@ -310,6 +337,9 @@ def cli(
     channels,
     channel_sites,
     channel_layers,
+    gap_rows,
+    top_rows,
+    row_margin,
     size,
     left,
     represent,
@@ -361,6 +391,11 @@ def cli(
 
     fill_cell_data = platform_tech_config["fills"]
 
+    data.Slice_16.GAP_ROWS = gap_rows
+    data.Block.TOP_SPARE_ROWS = top_rows
+    from . import ao_data
+    ao_data.Slice16AO.GAP_ROWS = gap_rows
+
     placer = Placer(
         odb_in,
         left,
@@ -372,6 +407,7 @@ def cli(
         placer,
         channel_dict,
         channel_layer_list,
+        row_margin,
     )
 
     if represent is not None:
