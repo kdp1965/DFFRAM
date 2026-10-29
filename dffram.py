@@ -167,6 +167,45 @@ class PinsAvoidChannels(Odb.OdbpyStep):
         return super().get_command() + ["--clearance", str(self.config["CHANNEL_PIN_CLEARANCE"])]
 
 
+class DiodePerNet(Odb.OdbpyStep):
+    """One antenna diode on every long, low-fanout net, in the spare rows
+    (TOP_SPARE_ROWS), before routing: the foundry's antenna deck credits only
+    explicit diodes (see placeram/diode_per_net.py)."""
+
+    id = "DFFRAM.DiodePerNet"
+    name = "Diode Per Long Net"
+
+    config_vars = Odb.OdbpyStep.config_vars + [
+        Variable(
+            "DIODE_PER_NET_THRESHOLD",
+            Decimal,
+            "A net whose pins span at least this half-perimeter gets a diode.",
+            default=250,
+            units="µm",
+        ),
+        Variable(
+            "DIODE_PER_NET_MAX_PINS",
+            int,
+            "Nets with more pins than this have the gate area to be safe and get none.",
+            default=16,
+        ),
+    ]
+
+    def get_script_path(self):
+        return "placeram.diode_per_net"
+
+    def get_command(self) -> List[str]:
+        raw = super().get_command()
+        raw.insert(raw.index("placeram.diode_per_net"), "-m")
+        cell, pin = str(self.config["DIODE_CELL"]).split("/")
+        return raw + [
+            "--diode-cell", cell,
+            "--diode-pin", pin,
+            "--threshold", str(self.config["DIODE_PER_NET_THRESHOLD"]),
+            "--max-pins", str(self.config["DIODE_PER_NET_MAX_PINS"]),
+        ]
+
+
 class RemoveChannelObstructions(Odb.OdbpyStep):
     """Drops the route-through channel obstructions the placer created,
     once the macro's detailed routing is done (see placeram/rm_obstructions.py)."""
@@ -623,7 +662,9 @@ class DFFRAM(SequentialFlow):
         PinsAvoidChannels,
         OpenROAD.GeneratePDN,
         PinsToLayer,
+        DiodePerNet,
         OpenROAD.STAMidPNR,
+        Odb.AddRoutingObstructions,     # the platform's ROUTING_OBSTRUCTIONS (tech.yml flow_config), e.g. gf180's Metal4-free margins
         OpenROAD.GlobalRouting,
 
         OpenROAD.CheckAntennas,
@@ -634,8 +675,9 @@ class DFFRAM(SequentialFlow):
 
         OpenROAD.STAMidPNR,
         OpenROAD.DetailedRouting,
-        RemoveChannelObstructions,
-        Odb.RemoveRoutingObstructions,
+        RemoveChannelObstructions,      # drops every routing obstruction, the platform's ROUTING_OBSTRUCTIONS included
+                                        # (so LibreLane's Odb.RemoveRoutingObstructions, which would look for them one by
+                                        # one and error "not found", is not run)
         OpenROAD.CheckAntennas,
         Checker.TrDRC,
         Odb.ReportDisconnectedPins,
@@ -669,6 +711,14 @@ class DFFRAM(SequentialFlow):
     # disable signoff tools it does not support via tech.yml `flow_config`.
     config_vars = [var for var in Classic.config_vars if var.name in GATED_RUN_VARS] + [
         Variable(
+            "RUN_DIODE_PER_NET",
+            bool,
+            "DFFRAM.DiodePerNet: one antenna diode per long, low-fanout net in the spare rows "
+            "(TOP_SPARE_ROWS) - what the foundry's KLayout antenna deck wants and OpenROAD's "
+            "repair does not see (placeram/diode_per_net.py).",
+            default=False,
+        ),
+        Variable(
             "RUN_HEURISTIC_DIODE_INSERTION",
             bool,
             "Odb.HeuristicDiodeInsertion: a diode on every pin of every net "
@@ -683,6 +733,7 @@ class DFFRAM(SequentialFlow):
     ]
 
     gating_config_vars = {
+        "DFFRAM.DiodePerNet": ["RUN_DIODE_PER_NET"],
         "Odb.HeuristicDiodeInsertion": ["RUN_HEURISTIC_DIODE_INSERTION"],
         "Magic.StreamOut": ["RUN_MAGIC_STREAMOUT"],
         "KLayout.StreamOut": ["RUN_KLAYOUT_STREAMOUT"],

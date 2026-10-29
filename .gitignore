@@ -35,3 +35,5 @@ venv/
 .venv/
 .venvunset/
 tile_trial/runs/
+build_*/
+products_*/

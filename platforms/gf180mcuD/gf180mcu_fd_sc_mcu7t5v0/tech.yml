@@ -17,9 +17,12 @@ sta:
     name: gf180mcu_fd_sc_mcu7t5v0__inv_4
     pin: "ZN"
   libs:
-    typical: gf180mcu_fd_sc_mcu7t5v0__tt_025C_5v00.lib
-    slow: gf180mcu_fd_sc_mcu7t5v0__ss_125C_4v50.lib.lib
-    fast: gf180mcu_fd_sc_mcu7t5v0__ff_n40C_5v50.lib
+    # the 3.3 V corners: Tiny Tapeout's GF180 tiles run at 3.3 V (LibreLane's
+    # gf180mcuD corners are tt_025C_3v30, ss_125C_3v00, ff_n40C_3v60); the
+    # 5 V ones were listed here before (and the slow one misspelt .lib.lib)
+    typical: gf180mcu_fd_sc_mcu7t5v0__tt_025C_3v30.lib
+    slow: gf180mcu_fd_sc_mcu7t5v0__ss_125C_3v00.lib
+    fast: gf180mcu_fd_sc_mcu7t5v0__ff_n40C_3v60.lib
   clock_periods:
     ram:
       "8x*": 5.21
@@ -36,4 +39,72 @@ fills:
   tap: gf180mcu_fd_sc_mcu7t5v0__filltie
   diode: gf180mcu_fd_sc_mcu7t5v0__antenna
 # Extra LibreLane configuration merged into the flow config for this platform.
-flow_config: {}
+flow_config:
+  # Vertical PDN stripes as the Tiny Tapeout GF180 (ttgf26c) tile's: Metal4,
+  # offset 16.32, pitch 38.87 - a macro placed with its origin x on the
+  # tile's stripe grid has its power pins on tile stripes
+  FP_PDN_VOFFSET: 16.32
+  FP_PDN_VPITCH: 38.87
+  # No route-through layer: Magic's blanket obstructions.  Route-through on
+  # Metal3 (as the sky130 platform's met3) was tried for the LISA RAM32 on
+  # the Tiny Tapeout 4x4 (2026-10-27): about half of the macro's Metal3
+  # shapes sit between the parent's tracks (6150 of 12000 horizontal wires
+  # at the half-pitch phase, plus 0.56 / 0.84 um wide via pads), so the
+  # tracks the abstract offered could not be used - the parent's router
+  # ended with 750+ Metal3 shorts against the macro inside its outline.
+  # A corner macro needs no routes across it; Metal4 (the power stripes as
+  # pins, the rest hidden) is the parent's layer over it.
+  LEF_ROUTE_THROUGH_LAYERS: []
+  # No signal routing on Metal4 in the die's top and bottom margins (the
+  # rows and the PDN stripes span y 3.62-164.94 of a 168.56 um die; the
+  # routed macro had 97 Metal4 signal segments on 48 nets in those 3.6 um
+  # strips).  The Tiny Tapeout tile's power stripes run full height over
+  # the macro's Metal4 power pins, through those margins - the LISA chip's
+  # first GF180 signoff (gf15, 2026-10-28) had its VPWR / VGND stripes
+  # crossing Di0[15], Di0[21], Do0MUX.A0[25] ... there: real shorts, which
+  # the abstract-based LVS cannot see (the Magic DRC showed 8 spacing
+  # notches at two columns).  Metal4 stays the signal layer elsewhere.  The
+  # x and y are the die's exactly (675.92 x 172.48 for the 32x32 ram_ao
+  # with its one spare row, TOP_SPARE_ROWS below: the top margin moves with
+  # the row count - 168.86-172.48 now, 164.94-168.56 without the row; a
+  # build with the wrong box left 11 Metal4 signal segments in the margin).
+  # OpenROAD clips a larger box when adding it and the remover then cannot
+  # find it ("Obstruction on Metal4 at [...] not found").
+  ROUTING_OBSTRUCTIONS:
+    - [Metal4, 0.0, 0.0, 675.92, 3.62]
+    - [Metal4, 0.0, 168.86, 675.92, 172.48]
+  # Antenna: the PDK's tech LEF gives Metal2-5 only ANTENNADIFFSIDEAREARATIO +
+  # ANTENNAGATEPLUSDIFF, so OpenROAD credits a driver's drain diffusion and
+  # rates the long Metal3 nets far under the limit (40 for Do0MUX.A1[13] in the
+  # 32x32 ram_ao where Tiny Tapeout's precheck - KLayout's GF180 deck, ANT.4 /
+  # ANT.16, diode credit only - has 916); its repair never touches them, and
+  # tech-LEF copies with the plain ANTENNASIDEAREARATIO did not change that
+  # (tried 2026-10-28).  The repair iterations stay for what OpenROAD does see;
+  # the deck's 20 nets are covered by the diodes below.
+  GRT_ANTENNA_REPAIR_ITERS: 5
+  DRT_ANTENNA_REPAIR_ITERS: 5
+  # So the diodes go in by hand: one per long, low-fanout net
+  # (DFFRAM.DiodePerNet, placeram/diode_per_net.py), in a spare row the
+  # placer leaves at the top, since the RAM's rows are packed full.
+  TOP_SPARE_ROWS: 1
+  RUN_DIODE_PER_NET: true
+  DIODE_PER_NET_THRESHOLD: 250
+  DIODE_PER_NET_MAX_PINS: 16
+  # The 3.3 V corners the Tiny Tapeout GF180 flow runs (its tt_tool.py
+  # --create-user-config --gf writes these); LibreLane's gf180mcuD defaults
+  # are the 5 V corners, and the macro's .lib views must carry the parent's
+  # corner names
+  VDD_PIN_VOLTAGE: 3.3
+  # The power pins named as LibreLane's gf180mcuD top level (and the Tiny
+  # Tapeout tile) names its nets, so a parent connects the macro without a
+  # pin map (the PDK's defaults are VDD / VSS)
+  VDD_PIN: VPWR
+  GND_PIN: VGND
+  DEFAULT_CORNER: nom_tt_025C_3v30
+  STA_CORNERS: [nom_tt_025C_3v30, nom_ss_125C_3v00, nom_ff_n40C_3v60,
+                min_tt_025C_3v30, min_ss_125C_3v00, min_ff_n40C_3v60,
+                max_tt_025C_3v30, max_ss_125C_3v00, max_ff_n40C_3v60]
+  LIB:
+    "*_tt_025C_3v30": [pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__tt_025C_3v30.lib]
+    "*_ss_125C_3v00": [pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__ss_125C_3v00.lib]
+    "*_ff_n40C_3v60": [pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__ff_n40C_3v60.lib]
