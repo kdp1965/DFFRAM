@@ -484,6 +484,16 @@ sky130_fd_sc_hd__conb_1 __cell__ (.HI(), .LO(LO));
 
 endmodule
 
+// the AND-OR read path's combine gates (models/ram_ao): the model names
+// these, so a platform supplies its own cells (2026-10-27, the GF180 port)
+module NAND4 (input A, input B, input C, input D, output Y);
+sky130_fd_sc_hd__nand4_1 __cell__ (.A(A), .B(B), .C(C), .D(D), .Y(Y));
+endmodule
+
+module OR4 (input A, input B, input C, input D, output X);
+sky130_fd_sc_hd__or4_1 __cell__ (.A(A), .B(B), .C(C), .D(D), .X(X));
+endmodule
+
 module EBUFN_2 (input A, input TE_B, output Z); 
 
 sky130_fd_sc_hd__ebufn_4 __cell__ ( .A(A), .TE_B(TE_B), .Z(Z));

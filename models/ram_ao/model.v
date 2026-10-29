@@ -1,6 +1,7 @@
 /*
-    RAM32 with an AND-OR read path (sky130; see BYTE_AO / WORD_AO in
-    block_definitions.v).  Same ports as models/ram's RAM32.
+    RAM32 with an AND-OR read path (see BYTE_AO / WORD_AO and the NAND4 /
+    OR4 wrappers in a platform's block_definitions.v: sky130A, sky130B,
+    gf180mcuD).  Same ports as models/ram's RAM32.
 
     Read path per bit: 8 x nand2 (one per word, ~(Q & SEL)) -> 2 x nand4
     (the slice's two word quads) -> or4 (the 16-word block's two slices)
@@ -38,7 +39,7 @@ module RAM8_AO #( parameter    USE_LATCH=1,
         for (i=0; i< WSIZE*8; i=i+1) begin : BIT
             for (h=0; h< 2; h=h+1) begin : HALF
                 wire y;
-                sky130_fd_sc_hd__nand4_1 N4 ( .A(Qn[(4*h+0)*WSIZE*8 + i]), .B(Qn[(4*h+1)*WSIZE*8 + i]), .C(Qn[(4*h+2)*WSIZE*8 + i]), .D(Qn[(4*h+3)*WSIZE*8 + i]), .Y(y) );
+                NAND4 N4 ( .A(Qn[(4*h+0)*WSIZE*8 + i]), .B(Qn[(4*h+1)*WSIZE*8 + i]), .C(Qn[(4*h+2)*WSIZE*8 + i]), .D(Qn[(4*h+3)*WSIZE*8 + i]), .Y(y) );
                 if (h == 0) begin : LO
                     assign PLO[i] = y;
                 end else begin : HI
@@ -89,7 +90,7 @@ module RAM16_AO #( parameter   USE_LATCH=1,
             RAM8_AO #(.USE_LATCH(USE_LATCH), .WSIZE(WSIZE)) RAM8 (.CLK(CLK_buf), .WE0(WE0_buf), .EN0(SEL0[i]), .Di0(Di0), .A0(A0_buf[2:0]), .PLO(PLO[i*WSIZE*8 +: WSIZE*8]), .PHI(PHI[i*WSIZE*8 +: WSIZE*8]) );
         end
         for (i=0; i< WSIZE*8; i=i+1) begin : BIT
-            sky130_fd_sc_hd__or4_1 OR4 ( .A(PLO[i]), .B(PHI[i]), .C(PLO[WSIZE*8 + i]), .D(PHI[WSIZE*8 + i]), .X(Do0_pre[i]) );
+            OR4 OR4 ( .A(PLO[i]), .B(PHI[i]), .C(PLO[WSIZE*8 + i]), .D(PHI[WSIZE*8 + i]), .X(Do0_pre[i]) );
         end
     endgenerate
 

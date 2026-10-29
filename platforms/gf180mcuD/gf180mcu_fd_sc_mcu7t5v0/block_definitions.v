@@ -321,6 +321,75 @@ module WORD #( parameter    USE_LATCH=0,
     
 endmodule 
 
+// The AND-OR read path (models/ram_ao, placeram/ao_data.py; from the sky130
+// BYTE_AO / WORD_AO, 2026-10-27): a nand2 beside every storage cell gives
+// the word's terms ~(Q & SEL0), the model combines eight words' terms in
+// nand4s and the two slices' in or4s, so nothing floats and there is no
+// tri-state bus (models/ram's bufz_1 per bit).
+module BYTE_AO #(  parameter   USE_LATCH=1)(
+    input   wire        CLK,    // FO: 1
+    input   wire        WE0,    // FO: 1
+    input   wire        SEL0,   // FO: 2
+    input   wire [7:0]  Di0,    // FO: 1
+    output  wire [7:0]  Qn0     // ~(Q & SEL0): the byte's terms of the read NAND tree
+);
+    wire [7:0]  Q_WIRE;
+    wire        WE0_WIRE;
+    wire        SEL0_buf;
+    wire        GCLK;
+    wire        CLK_B;
+    generate
+        genvar i;
+`ifndef NO_DIODES
+        (* keep = "true" *)
+        gf180mcu_fd_sc_mcu7t5v0__antenna DIODE_CLK (.I(CLK));
+`endif
+        if(USE_LATCH == 1) begin
+            gf180mcu_fd_sc_mcu7t5v0__inv_2 CLKINV(.ZN(CLK_B), .I(CLK));
+            gf180mcu_fd_sc_mcu7t5v0__icgtp_1 CG ( .TE(WE0_WIRE), .E(WE0_WIRE), .CLK(CLK_B), .Q(GCLK) );
+        end else begin
+            gf180mcu_fd_sc_mcu7t5v0__icgtp_1 CG ( .TE(WE0_WIRE), .E(WE0_WIRE), .CLK(CLK), .Q(GCLK) );
+        end
+        gf180mcu_fd_sc_mcu7t5v0__buf_2 SEL0BUF(.Z(SEL0_buf), .I(SEL0));       // 8 nand2 inputs
+        gf180mcu_fd_sc_mcu7t5v0__and2_1 CGAND( .A1(SEL0), .A2(WE0), .Z(WE0_WIRE) );
+        for(i=0; i<8; i=i+1) begin : BIT
+            if(USE_LATCH == 0)
+                gf180mcu_fd_sc_mcu7t5v0__dffq_1 STORAGE ( .D(Di0[i]), .Q(Q_WIRE[i]), .CLK(GCLK) );
+            else
+                gf180mcu_fd_sc_mcu7t5v0__latq_1 STORAGE (.Q(Q_WIRE[i]), .D(Di0[i]), .E(GCLK) );
+            gf180mcu_fd_sc_mcu7t5v0__nand2_1 OGATE ( .A1(Q_WIRE[i]), .A2(SEL0_buf), .ZN(Qn0[i]) );
+        end
+    endgenerate
+endmodule
+
+module WORD_AO #( parameter    USE_LATCH=0,
+                               WSIZE=1 ) (
+    input   wire                 CLK,    // FO: 1
+    input   wire [WSIZE-1:0]     WE0,    // FO: 1
+    input   wire                 SEL0,   // FO: 1
+    input   wire [(WSIZE*8-1):0] Di0,    // FO: 1
+    output  wire [(WSIZE*8-1):0] Qn0
+);
+    wire CLK_buf;
+    wire SEL0_buf;
+    gf180mcu_fd_sc_mcu7t5v0__clkbuf_4 CLKBUF (.Z(CLK_buf), .I(CLK));
+    gf180mcu_fd_sc_mcu7t5v0__clkbuf_2 SEL0BUF (.Z(SEL0_buf), .I(SEL0));
+    generate
+        genvar i;
+            for(i=0; i<WSIZE; i=i+1) begin : BYTE
+                BYTE_AO #(.USE_LATCH(USE_LATCH)) B ( .CLK(CLK_buf), .WE0(WE0[i]), .SEL0(SEL0_buf), .Di0(Di0[(i+1)*8-1:i*8]), .Qn0(Qn0[(i+1)*8-1:i*8]) );
+            end
+    endgenerate
+endmodule
+
+module NAND4 (input A, input B, input C, input D, output Y);
+gf180mcu_fd_sc_mcu7t5v0__nand4_1 __cell__ (.A1(A), .A2(B), .A3(C), .A4(D), .ZN(Y));
+endmodule
+
+module OR4 (input A, input B, input C, input D, output X);
+gf180mcu_fd_sc_mcu7t5v0__or4_1 __cell__ (.A1(A), .A2(B), .A3(C), .A4(D), .Z(X));
+endmodule
+
 module WORD_1RW1R #( parameter  USE_LATCH=1,
                                 WSIZE=1 ) (
     input   wire                CLK,    // FO: 1
@@ -362,10 +431,13 @@ gf180mcu_fd_sc_mcu7t5v0__clkbuf_2  __cell__ (.Z(X), .I(A));
 endmodule
 
 
-module CLKBUF_16 (input A, output X); 
-
-gf180mcu_fd_sc_mcu7t5v0__clkbuf_16 __cell__ (.Z(X), .I(A));
-
+module CLKBUF_16 (input A, output X);
+// a clkbuf_8 (26 sites), not clkbuf_16 (50): the RAM32's 32 Di buffers
+// sit in one row, which at 50 sites each was 896 um and set the macro's
+// width (the latch rows are ~600 um); 32 latch D inputs are within a
+// clkbuf_8's drive, and the flow's repair upsizes if a slew needs it
+// (2026-10-27, the LISA GF180 port)
+gf180mcu_fd_sc_mcu7t5v0__clkbuf_8 __cell__ (.I(A), .Z(X));
 endmodule
 
 module DIODE (input DIODE);
