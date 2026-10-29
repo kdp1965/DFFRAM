@@ -64,15 +64,16 @@ flow_config:
   # crossing Di0[15], Di0[21], Do0MUX.A0[25] ... there: real shorts, which
   # the abstract-based LVS cannot see (the Magic DRC showed 8 spacing
   # notches at two columns).  Metal4 stays the signal layer elsewhere.  The
-  # x and y are the die's exactly (675.92 x 172.48 for the 32x32 ram_ao
+  # x and y are the die's exactly (659.12 x 172.48 for the 32x32 ram_ao with
+  # COLUMN_LEVEL_SHIFT 2; 675.92 before it;
   # with its one spare row, TOP_SPARE_ROWS below: the top margin moves with
   # the row count - 168.86-172.48 now, 164.94-168.56 without the row; a
   # build with the wrong box left 11 Metal4 signal segments in the margin).
   # OpenROAD clips a larger box when adding it and the remover then cannot
   # find it ("Obstruction on Metal4 at [...] not found").
   ROUTING_OBSTRUCTIONS:
-    - [Metal4, 0.0, 0.0, 675.92, 3.62]
-    - [Metal4, 0.0, 168.86, 675.92, 172.48]
+    - [Metal4, 0.0, 0.0, 659.12, 3.62]
+    - [Metal4, 0.0, 168.86, 659.12, 172.48]
   # Antenna: the PDK's tech LEF gives Metal2-5 only ANTENNADIFFSIDEAREARATIO +
   # ANTENNAGATEPLUSDIFF, so OpenROAD credits a driver's drain diffusion and
   # rates the long Metal3 nets far under the limit (40 for Do0MUX.A1[13] in the
@@ -87,6 +88,11 @@ flow_config:
   # (DFFRAM.DiodePerNet, placeram/diode_per_net.py), in a spare row the
   # placer leaves at the top, since the RAM's rows are packed full.
   TOP_SPARE_ROWS: 1
+  # The right-hand column of decoder gates and buffers spread over the rows
+  # (a cell moves at most two rows): the stock placement left it ragged, up
+  # to 62 um in the fullest row against 36 if even, and the fullest row is
+  # the macro's width (Ken, 2026-10-29, after his CFGMEM macros).
+  COLUMN_LEVEL_SHIFT: 2
   RUN_DIODE_PER_NET: true
   DIODE_PER_NET_THRESHOLD: 250
   DIODE_PER_NET_MAX_PINS: 16

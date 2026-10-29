@@ -94,6 +94,16 @@ class PlaceRAM(Odb.OdbpyStep):
             default=0,
         ),
         Variable(
+            "COLUMN_LEVEL_SHIFT",
+            int,
+            "Spread the right-hand column of support cells (decoder gates, "
+            "buffers, diodes) evenly over the rows, moving a cell at most this "
+            "many rows up or down (placeram/level_columns.py): the widest row "
+            "sets the macro's width, and the stock column is ragged.  0 leaves "
+            "it as placed.",
+            default=0,
+        ),
+        Variable(
             "ROW_END_MARGIN",
             int,
             "Free sites the placer leaves at the end of every row, for the "
@@ -134,6 +144,7 @@ class PlaceRAM(Odb.OdbpyStep):
             ]
         raw += [
             "--row-margin", str(self.config["ROW_END_MARGIN"]),
+            "--level-columns", str(self.config["COLUMN_LEVEL_SHIFT"]),
             "--gap-rows", str(self.config["BLOCK_GAP_ROWS"]),
             "--top-rows", str(self.config["TOP_SPARE_ROWS"]),
         ]

@@ -47,6 +47,7 @@ except ImportError:
 
 from . import data
 from .row import Row
+from .level_columns import level_right_columns
 
 from .util import eprint
 from .reg_data import DFFRF
@@ -66,10 +67,12 @@ class Placer:
         channels=None,
         channel_layers=None,
         row_margin=0,
+        level_columns=0,
     ):
         self.channels = channels or {}
         self.channel_layers = channel_layers or []
         self.row_margin = row_margin
+        self.level_columns = level_columns
         # Initialize Database
         self.db = odb.dbDatabase.create()
 
@@ -165,6 +168,9 @@ class Placer:
         print(f"Placing across {len(self.rows)} rows...")
         last_row = self.hierarchy.place(self.rows)
         print(f"Placement concluded with {last_row} rows...")
+        # the right-hand column of support cells spread evenly over the rows
+        # (level_columns.py): the widest row sets the macro's width
+        level_right_columns(self.block, self.rows, last_row, self.level_columns)
         Row.fill_rows(self.rows, 0, last_row)
         self.obstruct_channels(last_row)
 
@@ -324,6 +330,12 @@ def check_readable(file):
     help="Rows of decap left above the output muxes",
 )
 @click.option(
+    "--level-columns",
+    default=0,
+    type=int,
+    help="Spread the right-hand column of support cells (decoder gates, buffers, diodes) evenly over the rows, moving a cell at most this many rows; 0 leaves the column as placed",
+)
+@click.option(
     "--row-margin",
     default=0,
     type=int,
@@ -339,6 +351,7 @@ def cli(
     channel_layers,
     gap_rows,
     top_rows,
+    level_columns,
     row_margin,
     size,
     left,
@@ -408,6 +421,7 @@ def cli(
         channel_dict,
         channel_layer_list,
         row_margin,
+        level_columns,
     )
 
     if represent is not None:
