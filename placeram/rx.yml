@@ -98,6 +98,20 @@ IhpCfgMem_16:
   out_mux: \bOUT_NAND\\\[(\d+)\\\]\.OUT_MUX
   quad_a22oi: \bQUADS\\\[(\d+)\\\]\.QBIT\\\[(\d+)\\\]\.QUAD_A22OI(\d+)
   quad_and: \bQUADS\\\[(\d+)\\\]\.QBIT\\\[(\d+)\\\]\.QUAD_AND
+# 8x44 GF180 configuration memory (models/cfgmem_gf, placeram/gf_cfgmem_data.py)
+GfCfgSlice:
+  cfg_bit: \bCWORD\.CFG_BIT\\\[(\d+)\\\]\.STORAGE
+  cfg_diode: \bCWORD\.DIODE_LE0
+  seldiode: \bDIODE_SEL1
+  selbuf: \bSELBUF
+  rowand: \bROW_AND
+GfCfgMem_8:
+  cfg_slices: \bSLICE\\\[(\d+)\\\]
+  decoders: \bDEC(\d+)\b
+  a_diodes: \bDIODE_A(\d+)\\\[(\d+)\\\]
+  in_diodes: \bDIODE_(EN0|WE0)\b
+  out_nand: \bOUT_NAND\\\[(\d+)\\\]\.QUAD_NAND
+  quad_aoi: \bQUADS\\\[(\d+)\\\]\.QBIT\\\[(\d+)\\\]\.QUAD_AOI(\d+)
 Old:
   webufs: \bWEBUF\\\[(\d+)\\\].__cell__
   doregs: \bDo(\d+)_REG\b

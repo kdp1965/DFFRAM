@@ -541,3 +541,39 @@ module RFWORD0 #(parameter WSIZE=32)
         end
     endgenerate 
 endmodule
+// Blocks of the cfgmem_gf model (CFGMEM8x44, placeram/gf_cfgmem_data.py): the
+// GF180 port of the IHP CFGMEM's building blocks, with the IHP platform's
+// wrapper ports (A/B/X, A1/A2/B1/B2/Y) so a model reads the same on both.
+module AND2_2 (input A, input B, output X);
+    gf180mcu_fd_sc_mcu7t5v0__and2_2 __cell__ (.A1(A), .A2(B), .Z(X));
+endmodule
+
+module AND2_4 (input A, input B, output X);
+    gf180mcu_fd_sc_mcu7t5v0__and2_4 __cell__ (.A1(A), .A2(B), .Z(X));
+endmodule
+
+module AOI22_1 (input A1, input A2, input B1, input B2, output Y);
+    gf180mcu_fd_sc_mcu7t5v0__aoi22_1 __cell__ (.A1(A1), .A2(A2), .B1(B1), .B2(B2), .ZN(Y));
+endmodule
+
+module CLKBUF_8 (input A, output X);
+    gf180mcu_fd_sc_mcu7t5v0__clkbuf_8 __cell__ (.I(A), .Z(X));
+endmodule
+
+// One configuration word: WSIZE transparent latches sharing a load enable.
+module CFG_WORD #(parameter WSIZE = 32) (
+    input   wire             LE0,
+    input   wire [WSIZE-1:0] Di0,
+    output  wire [WSIZE-1:0] Do0
+);
+    generate
+        genvar i;
+`ifndef NO_DIODES
+        (* keep = "true" *)
+        gf180mcu_fd_sc_mcu7t5v0__antenna DIODE_LE0 (.I(LE0));
+`endif
+        for (i = 0; i < WSIZE; i = i + 1) begin : CFG_BIT
+            gf180mcu_fd_sc_mcu7t5v0__latq_1 STORAGE (.Q(Do0[i]), .D(Di0[i]), .E(LE0));
+        end
+    endgenerate
+endmodule

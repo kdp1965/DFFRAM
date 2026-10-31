@@ -1012,6 +1012,10 @@ def create_hierarchy(instances, word_count, left, placer=None, channels=None):
         from .ihp_cfgmem_data import IhpCfgMem_16
 
         hierarchy = IhpCfgMem_16(instances, left, channels)
+    elif placer == "GfCfgMem_8":
+        from .gf_cfgmem_data import GfCfgMem_8
+
+        hierarchy = GfCfgMem_8(instances)
     elif placer == "IhpLatchRam":
         from .ihp_lram_data import IhpLatchRam
 

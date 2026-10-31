@@ -71,9 +71,10 @@ flow_config:
   # build with the wrong box left 11 Metal4 signal segments in the margin).
   # OpenROAD clips a larger box when adding it and the remover then cannot
   # find it ("Obstruction on Metal4 at [...] not found").
-  ROUTING_OBSTRUCTIONS:
-    - [Metal4, 0.0, 0.0, 675.92, 3.62]
-    - [Metal4, 0.0, 168.86, 675.92, 172.48]
+  # Since the CFGMEM8x44 (2026-10-29) the margins are computed from the
+  # floorplan by DFFRAM.MarginObstructions (the boxes above were the RAM32's
+  # and had to follow its every row-count change).
+  MARGIN_OBSTRUCTION_LAYERS: [Metal4]
   # Antenna: the PDK's tech LEF gives Metal2-5 only ANTENNADIFFSIDEAREARATIO +
   # ANTENNAGATEPLUSDIFF, so OpenROAD credits a driver's drain diffusion and
   # rates the long Metal3 nets far under the limit (40 for Do0MUX.A1[13] in the

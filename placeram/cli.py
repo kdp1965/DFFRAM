@@ -408,6 +408,10 @@ def cli(
     data.Block.TOP_SPARE_ROWS = top_rows
     from . import ao_data
     ao_data.Slice16AO.GAP_ROWS = gap_rows
+    from . import gf_cfgmem_data
+    gf_cfgmem_data.GfCfgMem_8.TOP_SPARE_ROWS = top_rows
+    gf_cfgmem_data.GfCfgMem_8.COMPACT_DECODER = bool(blocks_config.get("compact_decoder"))
+    gf_cfgmem_data.GfCfgMem_8.BALANCED_DECODER = bool(blocks_config.get("balanced_decoder"))
 
     placer = Placer(
         odb_in,

@@ -1,0 +1,35 @@
+# 8 x 44 configuration memory for the GF180 7-track library: the PRISM State
+# Information Table of the ttboat26 TinyQV tile (one word per row, aoi22 /
+# nand4 read-out, no bypass), placed by placeram/gf_cfgmem_data.py.
+#   python3 dffram.py --manual-pdk -p gf180mcuD -s gf180mcu_fd_sc_mcu7t5v0 -b cfgmem_gf \
+#       --build-dir build_gf_cfg --products-dir products_gf_cfg 8x44
+widths: [44]
+counts: [8]
+design_name_template: "CFGMEM{count}x{width}"
+# WSIZE is the word width in bits (the RAM models take it in bytes)
+wsize_bits: true
+placer: GfCfgMem_8
+variants:
+  - null
+flow_config:
+  # As models/ram_ao on this platform: the blocks carry their own diodes and
+  # DFFRAM.DiodePerNet adds one per long net in the spare row; the heuristic
+  # one-per-pin insertion has no room, and repair_antennas legalizes on the
+  # spot (DPL-0036 at the row ends), so it uses jumpers only.
+  RUN_HEURISTIC_DIODE_INSERTION: false
+  # No spare diode row: DFFRAM.DiodePerNet placed 0 diodes in the 8x44 (no
+  # net is both over 250 um and under 17 pins) and the foundry antenna deck
+  # passed; the platform's spare row was a row of filltie, 3.92 um of height.
+  TOP_SPARE_ROWS: 0
+  RUN_DIODE_PER_NET: false
+  # No free sites at the row ends: nothing is legalised into them here, the
+  # default 12 were two columns of decap, 6.72 um.
+  ROW_END_MARGIN: 0
+  GRT_ANTENNA_REPAIR_JUMPER_ONLY: true
+  DRT_ANTENNA_REPAIR_JUMPER_ONLY: true
+# The 582.40 um layout (decoder gates in the short rows' slack, see
+# placeram/gf_cfgmem_data.py); it did not route in the ttboat26 tile.
+compact_decoder: false
+# Decoder3x8's column with AND0 (nor4_2) and the enable buffer swapped
+# between word 0's row and the output row.
+balanced_decoder: true

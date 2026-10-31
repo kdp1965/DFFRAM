@@ -63,7 +63,9 @@ class Row(object):
     def tap(self, width: float = 0):
         if Row.tap_width is None:
             return
-        if self.since_last_tap + width > Row.tap_distance:
+        # self.tap_distance: Row.tap_distance unless a placer set a row's own
+        # (an unpaired row, whose n-well no neighbour row taps)
+        if self.since_last_tap + width > self.tap_distance:
             self.place(
                 Row.create_fill(
                     "tap_%i_%i" % (self.ordinal, self.tap_counter), self.tap_width

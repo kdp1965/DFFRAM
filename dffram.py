@@ -233,6 +233,82 @@ class RemoveChannelObstructions(Odb.OdbpyStep):
         return raw
 
 
+class MarginObstructions(Odb.AddRoutingObstructions):
+    """
+    Odb.AddRoutingObstructions plus, on MARGIN_OBSTRUCTION_LAYERS, the die's
+    bottom and top margins (below the first row, above the last) as
+    obstructions, computed from the floorplan at hand.  A Tiny Tapeout tile's
+    vertical power stripes run full height through a macro, margins included,
+    over the macro's own stripe pins; a signal segment on the stripe layer in
+    a margin is a short the abstract-based LVS cannot see (the LISA chip's
+    gf15, 2026-10-28).  The gf180 platform used to list the boxes die-exact in
+    ROUTING_OBSTRUCTIONS, which had to follow every change of the row count.
+    """
+
+    id = "DFFRAM.MarginObstructions"
+    name = "Add Obstructions (with die margins)"
+
+    config_vars = Odb.AddRoutingObstructions.config_vars + [
+        Variable(
+            "MARGIN_OBSTRUCTION_LAYERS",
+            Optional[List[str]],
+            "Layers obstructed in the die's bottom and top margins, outside the rows.",
+            default=None,
+        ),
+    ]
+
+    def margin_boxes(self) -> List[Tuple[str, Decimal, Decimal, Decimal, Decimal]]:
+        layers = self.config["MARGIN_OBSTRUCTION_LAYERS"] or []
+        if not layers:
+            return []
+        die = None
+        dbu = None
+        row_ys = set()
+        with open(self._def_in, encoding="utf8") as f:
+            for line in f:
+                s = line.strip()
+                if s.startswith("UNITS DISTANCE MICRONS"):
+                    dbu = int(s.split()[3])
+                elif s.startswith("DIEAREA"):
+                    die = [int(v) for v in re.findall(r"-?\d+", s)][:4]
+                elif s.startswith("ROW "):
+                    row_ys.add(int(s.split()[4]))
+                elif s.startswith("COMPONENTS"):
+                    break
+        if die is None or dbu is None or len(row_ys) < 2:
+            raise ValueError("MarginObstructions: DIEAREA, UNITS or rows missing from the DEF")
+        ys = sorted(row_ys)
+        pitch = min(b - a for a, b in zip(ys, ys[1:]))
+        x0, y0, x1, y1 = die
+        core_y0, core_y1 = ys[0], ys[-1] + pitch
+
+        def um(v):
+            return Decimal(v) / Decimal(dbu)
+
+        boxes = []
+        for layer in layers:
+            if core_y0 > y0:
+                boxes.append((layer, um(x0), um(y0), um(x1), um(core_y0)))
+            if y1 > core_y1:
+                boxes.append((layer, um(x0), um(core_y1), um(x1), um(y1)))
+        return boxes
+
+    def get_command(self) -> List[str]:
+        command = super().get_command()
+        for box in self.margin_boxes():
+            info("Margin obstruction: %s %s %s %s %s" % box)
+            command.append("--obstructions")
+            command.append(" ".join(str(v) for v in box))
+        return command
+
+    def run(self, state_in, **kwargs):
+        if self.config["ROUTING_OBSTRUCTIONS"] is None and not self.config["MARGIN_OBSTRUCTION_LAYERS"]:
+            info(f"Neither ROUTING_OBSTRUCTIONS nor MARGIN_OBSTRUCTION_LAYERS is set. Skipping '{self.id}'…")
+            return {}, {}
+        self._def_in = str(state_in[DesignFormat.DEF])  # for margin_boxes (get_command sees no state)
+        return Odb.OdbpyStep.run(self, state_in, **kwargs)
+
+
 class Floorplan(OpenROAD.Floorplan):
     id = "DFFRAM.Floorplan"
 
@@ -675,7 +751,7 @@ class DFFRAM(SequentialFlow):
         PinsToLayer,
         DiodePerNet,
         OpenROAD.STAMidPNR,
-        Odb.AddRoutingObstructions,     # the platform's ROUTING_OBSTRUCTIONS (tech.yml flow_config), e.g. gf180's Metal4-free margins
+        MarginObstructions,             # the platform's ROUTING_OBSTRUCTIONS (tech.yml flow_config) plus MARGIN_OBSTRUCTION_LAYERS: gf180's Metal4-free margins
         OpenROAD.GlobalRouting,
 
         OpenROAD.CheckAntennas,
@@ -1048,7 +1124,8 @@ def main(
                 break
 
     logical_width = word_width_bytes
-    if building_blocks == "rf":
+    # the register file and the CFGMEM models take WSIZE in bits (config.yml wsize_bits)
+    if building_blocks == "rf" or platform_config.get("wsize_bits"):
         logical_width = word_width
 
     rt_max_layer = tech_info["metal_layers"]["rt-max-layer"]
